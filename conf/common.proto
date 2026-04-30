@@ -1,0 +1,59 @@
+syntax = "proto3";
+package ley.conf;
+
+option go_package = "ley/conf";
+
+import "google/protobuf/duration.proto";
+
+enum LogLevel {
+  Debug = 0;
+  Info = 1;
+  Warn = 2;
+  Error = 3;
+  Fatal = 4;
+}
+
+enum LogMode {
+  Dev = 0;
+  Prod = 1;
+}
+
+// 启动所必须的配置文件，应该从本地读取
+message Bootstrap {
+  Server server = 1;
+  Log log = 2;
+  Etcd etcd = 3;
+  Trace trace = 4;
+}
+
+
+message Trace {
+  string endpoint = 1;
+}
+
+
+message Log {
+  LogLevel level = 1;
+  string path = 2;
+  LogMode mode = 3;
+}
+
+
+message Etcd{
+  repeated string endpoints = 1;
+}
+message Server {
+  HTTP http = 1;
+  GRPC grpc = 2;
+}
+message HTTP {
+  string network = 1;
+  string addr = 2;
+  google.protobuf.Duration timeout = 3;
+}
+
+message GRPC {
+  string network = 1;
+  string addr = 2;
+  google.protobuf.Duration timeout = 3;
+}

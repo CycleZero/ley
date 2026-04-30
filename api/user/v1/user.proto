@@ -1,0 +1,279 @@
+// user.proto — 用户服务接口定义
+//
+// 定义用户注册、登录认证、Token管理、用户资料读写等 RPC。
+// 使用 gRPC + HTTP REST 双协议，通过 google.api.http 注解自动生成 RESTful 路由。
+// 所有请求字段使用 protoc-gen-validate 进行参数校验。
+syntax = "proto3";
+
+package user.v1;
+
+import "google/api/annotations.proto";
+import "validate/validate.proto";
+
+option go_package = "ley/api/user/v1;userv1";
+
+// =============================================================================
+// UserService — 用户服务
+//
+// 提供完整的用户生命周期管理：
+//   1. 注册 → Register
+//   2. 登录 → Login（返回 AccessToken + RefreshToken）
+//   3. 令牌刷新 → RefreshToken（旧 RefreshToken 轮换）
+//   4. 获取资料 → GetProfile（需 Bearer Token）
+//   5. 更新资料 → UpdateProfile（需 Bearer Token）
+//
+// 内部 RPC（供其他服务 gRPC 调用，不暴露 HTTP）：
+//   6. GetUser — 按 ID 查询用户
+//   7. BatchGetUsers — 批量查询用户（解决 N+1 问题）
+// =============================================================================
+service UserService {
+
+  // ---------------------------------------------------------------------------
+  // 注册：创建新用户账号
+  // 用户名 3-32 位字母数字下划线连字符，邮箱格式校验，密码 8-64 位含大小写+数字
+  // 成功返回 200 + 用户基本信息（不含密码）
+  // 重复用户名/邮箱返回 409 Conflict
+  // ---------------------------------------------------------------------------
+  rpc Register (RegisterRequest) returns (RegisterReply) {
+    option (google.api.http) = {
+      post: "/api/v1/auth/register"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 登录：用户名或邮箱 + 密码 → TokenPair
+  // 账号错误或密码错误统一返回 401 Unauthorized（不区分提示防枚举）
+  // 账号被禁用返回 403 Forbidden
+  // ---------------------------------------------------------------------------
+  rpc Login (LoginRequest) returns (LoginReply) {
+    option (google.api.http) = {
+      post: "/api/v1/auth/login"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 令牌刷新：用 RefreshToken 换取新的 TokenPair
+  // 旧 RefreshToken 加入黑名单实现令牌轮换防重放
+  // 黑名单中的令牌或过期令牌返回 401
+  // ---------------------------------------------------------------------------
+  rpc RefreshToken (RefreshTokenRequest) returns (LoginReply) {
+    option (google.api.http) = {
+      post: "/api/v1/auth/refresh"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 登出：将 AccessToken + RefreshToken 加入黑名单
+  // 需要 Authorization: Bearer <access_token> 请求头
+  // ---------------------------------------------------------------------------
+  rpc Logout (LogoutRequest) returns (LogoutReply) {
+    option (google.api.http) = {
+      post: "/api/v1/auth/logout"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 获取当前登录用户资料
+  // 需要 Bearer Token，从 token payload 中提取 user_id
+  // ---------------------------------------------------------------------------
+  rpc GetProfile (GetProfileRequest) returns (GetProfileReply) {
+    option (google.api.http) = {
+      get: "/api/v1/users/me"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 更新当前用户资料
+  // 仅允许修改 nickname、avatar、bio 三个字段
+  // username/email 不可通过此接口修改
+  // ---------------------------------------------------------------------------
+  rpc UpdateProfile (UpdateProfileRequest) returns (GetProfileReply) {
+    option (google.api.http) = {
+      put: "/api/v1/users/me"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // （内部）按 ID 获取用户 — 供其他服务 gRPC 调用
+  // ---------------------------------------------------------------------------
+  rpc GetUser (GetUserRequest) returns (GetUserReply);
+
+  // ---------------------------------------------------------------------------
+  // （内部）批量获取用户 — 解决列表场景下的 N+1 查询
+  // ---------------------------------------------------------------------------
+  rpc BatchGetUsers (BatchGetUsersRequest) returns (BatchGetUsersReply);
+}
+
+// =============================================================================
+// 请求 / 响应消息定义
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// Register — 注册请求
+// -----------------------------------------------------------------------------
+message RegisterRequest {
+  // 用户名，3-32 位，仅允许字母数字、下划线、连字符
+  string username = 1 [(validate.rules).string = {
+    min_len: 3
+    max_len: 32
+    pattern: "^[a-zA-Z0-9_-]+$"
+  }];
+
+  // 邮箱地址
+  string email = 2 [(validate.rules).string = {
+    email: true
+  }];
+
+  // 密码，8-64 位
+  string password = 3 [(validate.rules).string = {
+    min_len: 8
+    max_len: 64
+  }];
+
+  // 显示昵称（可选，默认同 username）
+  string nickname = 4 [(validate.rules).string = {
+    max_len: 64
+  }];
+}
+
+// 注册成功返回
+message RegisterReply {
+  UserInfo user = 1; // 创建成功的用户信息
+}
+
+// -----------------------------------------------------------------------------
+// Login — 登录请求
+// -----------------------------------------------------------------------------
+message LoginRequest {
+  // 登录账号：用户名或邮箱均可
+  string account  = 1 [(validate.rules).string = {
+    min_len: 1
+  }];
+
+  // 登录密码
+  string password = 2 [(validate.rules).string = {
+    min_len: 1
+  }];
+}
+
+// 登录成功返回
+message LoginReply {
+  UserInfo  user       = 1; // 当前用户信息
+  TokenPair token_pair = 2; // 访问令牌 + 刷新令牌
+}
+
+// -----------------------------------------------------------------------------
+// RefreshToken — 令牌刷新
+// -----------------------------------------------------------------------------
+message RefreshTokenRequest {
+  // 当前有效的 RefreshToken
+  string refresh_token = 1 [(validate.rules).string = {
+    min_len: 1
+  }];
+}
+
+// -----------------------------------------------------------------------------
+// Logout — 登出请求
+// -----------------------------------------------------------------------------
+message LogoutRequest {
+  // 可选的 RefreshToken，用于加入黑名单
+  string refresh_token = 1;
+}
+
+// 登出成功返回（空响应）
+message LogoutReply {}
+
+// -----------------------------------------------------------------------------
+// Profile — 资料查询/更新
+// -----------------------------------------------------------------------------
+
+// 获取资料请求（无需请求体，user_id 从 JWT 中提取）
+message GetProfileRequest {}
+
+// 获取资料响应
+message GetProfileReply {
+  UserInfo user = 1;
+}
+
+// 更新资料请求（仅允许修改这三个字段）
+message UpdateProfileRequest {
+  string nickname = 1 [(validate.rules).string = {
+    max_len: 64
+  }];
+
+  // 头像 URL（MinIO 存储路径）
+  string avatar = 2 [(validate.rules).string = {
+    max_len: 512
+  }];
+
+  // 个人简介
+  string bio = 3 [(validate.rules).string = {
+    max_len: 500
+  }];
+}
+
+// -----------------------------------------------------------------------------
+// 内部 RPC — 按 ID 查询用户
+// -----------------------------------------------------------------------------
+message GetUserRequest {
+  // 用户 ID（内部自增 ID 或对外 UUID 均可）
+  string user_id = 1 [(validate.rules).string = {
+    min_len: 1
+  }];
+}
+
+message GetUserReply {
+  UserInfo user = 1;
+}
+
+// -----------------------------------------------------------------------------
+// 内部 RPC — 批量查询用户
+// -----------------------------------------------------------------------------
+message BatchGetUsersRequest {
+  // 用户 ID 列表，最多 100 个
+  repeated string user_ids = 1 [(validate.rules).repeated = {
+    min_items: 1
+    max_items: 100
+  }];
+}
+
+message BatchGetUsersReply {
+  repeated UserInfo users = 1; // 按请求顺序返回（缺失的用户不在列表中）
+}
+
+// =============================================================================
+// 共享数据模型
+// =============================================================================
+
+// TokenPair — 令牌对
+// AccessToken 有效期 15 分钟，RefreshToken 有效期 7 天
+message TokenPair {
+  // JWT AccessToken，Bearer 模式传递
+  string access_token  = 1;
+
+  // JWT RefreshToken，用于获取新令牌
+  string refresh_token = 2;
+
+  // AccessToken 过期时间（Unix 秒），前端据此判断是否需要刷新
+  int64  expires_in    = 3;
+}
+
+// UserInfo — 公开用户信息
+// 仅包含可对外暴露的字段，不含 password 和 deleted_at
+message UserInfo {
+  string id         = 1; // 用户 UUID
+  string username   = 2; // 用户名
+  string email      = 3; // 邮箱
+  string nickname   = 4; // 昵称
+  string avatar     = 5; // 头像 URL
+  string bio        = 6; // 个人简介
+  string role       = 7; // 角色: reader / author / admin
+  string status     = 8; // 状态: active / disabled
+  string created_at = 9; // 注册时间 (ISO8601)
+  string updated_at = 10;// 最后更新时间 (ISO8601)
+}

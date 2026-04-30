@@ -1,0 +1,43 @@
+// post_error.proto — 文章服务错误码枚举
+syntax = "proto3";
+
+package post.v1;
+
+option go_package = "ley/api/post/v1;postv1";
+
+enum PostErrorReason {
+  POST_ERROR_UNSPECIFIED   = 0;
+
+  // 文章不存在 — HTTP 404
+  POST_NOT_FOUND           = 1;
+
+  // 标题为空或超长 — HTTP 422
+  POST_TITLE_INVALID       = 2;
+
+  // 正文为空或超长 — HTTP 422
+  POST_CONTENT_INVALID     = 3;
+
+  // Slug 已存在 — HTTP 409
+  SLUG_ALREADY_EXISTS      = 4;
+
+  // 非文章作者 — HTTP 403
+  NOT_POST_OWNER           = 5;
+
+  // 文章已发布 — HTTP 409
+  ALREADY_PUBLISHED        = 6;
+
+  // 标签不存在 — HTTP 404
+  TAG_NOT_FOUND            = 7;
+
+  // 标签名称已存在 — HTTP 409
+  TAG_NAME_EXISTS          = 8;
+
+  // 分类不存在 — HTTP 404
+  CATEGORY_NOT_FOUND       = 9;
+
+  // 分类名称已存在 — HTTP 409
+  CATEGORY_EXISTS          = 10;
+
+  // 分类下有子分类，无法删除 — HTTP 409
+  CATEGORY_HAS_CHILDREN    = 11;
+}

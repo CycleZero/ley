@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-kratos/kratos/v2/middleware"
 	"github.com/go-kratos/kratos/v2/transport"
+	jwtlib "github.com/golang-jwt/jwt/v5"
 )
 
 const (
@@ -95,7 +96,7 @@ type Payload struct {
 type Claims struct {
 	TokenType string
 	Payload
-	jwt.RegisteredClaims
+	jwtlib.RegisteredClaims
 }
 
 // jwtPaser 组件
@@ -120,14 +121,14 @@ func (j *jwtPaser) GenerateToken(payload Payload) (string, error) {
 	claims := Claims{
 		TokenType: TokenTypeAccess,
 		Payload:   payload,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(expireTime),
-			IssuedAt:  jwt.NewNumericDate(nowTime),
+		RegisteredClaims: jwtlib.RegisteredClaims{
+			ExpiresAt: jwtlib.NewNumericDate(expireTime),
+			IssuedAt:  jwtlib.NewNumericDate(nowTime),
 			Issuer:    j.config.Issuer,
 		},
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	token := jwtlib.NewWithClaims(jwtlib.SigningMethodHS256, claims)
 	return token.SignedString([]byte(j.config.SigningKey))
 }
 
@@ -148,14 +149,14 @@ func (j *jwtPaser) GenerateTokenPair(payload Payload) (*TokenPair, error) {
 	refreshClaims := Claims{
 		TokenType: TokenTypeRefresh,
 		Payload:   payload,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(refreshExpireTime),
-			IssuedAt:  jwt.NewNumericDate(nowTime),
+		RegisteredClaims: jwtlib.RegisteredClaims{
+			ExpiresAt: jwtlib.NewNumericDate(refreshExpireTime),
+			IssuedAt:  jwtlib.NewNumericDate(nowTime),
 			Issuer:    j.config.Issuer,
 		},
 	}
 
-	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims)
+	refreshToken := jwtlib.NewWithClaims(jwtlib.SigningMethodHS256, refreshClaims)
 	refreshTokenString, err := refreshToken.SignedString([]byte(j.config.SigningKey))
 	if err != nil {
 		return nil, err
@@ -169,7 +170,7 @@ func (j *jwtPaser) GenerateTokenPair(payload Payload) (*TokenPair, error) {
 
 // ParseToken 解析 Token（不校验类型）
 func (j *jwtPaser) ParseToken(tokenString string) (*Claims, error) {
-	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
+	token, err := jwtlib.ParseWithClaims(tokenString, &Claims{}, func(token *jwtlib.Token) (interface{}, error) {
 		return []byte(j.config.SigningKey), nil
 	})
 

@@ -1,0 +1,41 @@
+# 根配置：对应 proto 中的 Bootstrap 消息
+# 启动所必须的配置文件，应该从本地读取
+
+# 服务配置
+server:
+  # HTTP 服务配置
+  http:
+    # 网络类型：tcp/unix
+    network: tcp
+    # 监听地址
+    addr: 0.0.0.0:8000
+    # 请求超时时间
+    timeout: 3s
+  # gRPC 服务配置
+  grpc:
+    # 网络类型：tcp/unix
+    network: tcp
+    # 监听地址
+    addr: 0.0.0.0:9000
+    # 请求超时时间
+    timeout: 3s
+
+# 日志配置
+log:
+  # 日志级别：Debug/Info/Warn/Error/Fatal
+  level: Debug
+  # 日志存储路径
+  path: ./data/logs
+  # 日志模式：Dev(开发)/Prod(生产)
+  mode: Dev
+
+# Etcd 配置
+etcd:
+  # 节点地址列表（repeated 数组格式）
+  endpoints:
+    - 127.0.0.1:2379
+
+# 链路追踪配置
+trace:
+  # 追踪服务端点地址
+  endpoint: http://127.0.0.1:14268/api/traces

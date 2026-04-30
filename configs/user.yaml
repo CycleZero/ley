@@ -1,0 +1,31 @@
+# 用户服务远程配置 — 对应 app/user/internal/conf/conf.proto 的 Config
+# 由 etcd 下发，路径: ley/configs/user/config.yaml
+
+data:
+  database:
+    driver: postgres
+    host: 127.0.0.1
+    port: 5432
+    database: ley
+    username: ley
+    password: ley123
+  redis:
+    network: tcp
+    host: 127.0.0.1
+    port: 6379
+    password: ""
+    db: 0
+    read_timeout: 0.2s
+    write_timeout: 0.2s
+
+jwt:
+  secret: "change-me-in-production-use-256bit-random-key"
+  access_ttl: 900s      # 15 分钟
+  refresh_ttl: 604800s  # 7 天
+  issuer: "ley-user"
+
+minio:
+  endpoint: 127.0.0.1:9000
+  access_key_id: minioadmin
+  access_key_secret: minioadmin
+  bucket_name: ley-avatars

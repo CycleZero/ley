@@ -1,0 +1,661 @@
+// post.proto — 文章服务接口定义
+//
+// 定义文章全生命周期管理（CRUD + 发布/归档）、标签管理、分类管理、全文搜索、
+// 点赞、浏览计数等 RPC。所有接口遵循 RESTful 语义，通过 google.api.http 注解生成路由。
+syntax = "proto3";
+
+package post.v1;
+
+import "google/api/annotations.proto";
+import "validate/validate.proto";
+
+option go_package = "ley/api/post/v1;postv1";
+
+// =============================================================================
+// PostService — 文章服务
+//
+// 功能分组：
+//   A. 文章 CRUD — CreatePost / UpdatePost / DeletePost / GetPost / ListPosts
+//   B. 文章状态 — PublishPost / ArchivePost
+//   C. 搜索      — SearchPosts
+//   D. 互动      — LikePost / UnlikePost
+//   E. 标签      — CreateTag / ListTags / DeleteTag
+//   F. 分类      — CreateCategory / ListCategories / UpdateCategory / DeleteCategory
+//   G. 内部 RPC  — IncrementViewCount / BatchGetPosts
+// =============================================================================
+service PostService {
+
+  // ===========================================================================
+  // A. 文章 CRUD
+  // ===========================================================================
+
+  // ---------------------------------------------------------------------------
+  // 创建文章（保存为草稿）
+  // 自动从标题生成 Slug，自动生成摘要（若未提供）
+  // 标签按名称传入，服务端自动查找或创建
+  // 需要登录（Author 及以上角色）
+  // ---------------------------------------------------------------------------
+  rpc CreatePost (CreatePostRequest) returns (CreatePostReply) {
+    option (google.api.http) = {
+      post: "/api/v1/posts"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 更新文章
+  // 仅作者可修改自己的文章
+  // 标签变更时全量替换（先删旧关联再插新）
+  // ---------------------------------------------------------------------------
+  rpc UpdatePost (UpdatePostRequest) returns (UpdatePostReply) {
+    option (google.api.http) = {
+      put: "/api/v1/posts/{id}"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 删除文章（软删除）
+  // 仅作者可删除自己的文章
+  // ---------------------------------------------------------------------------
+  rpc DeletePost (DeletePostRequest) returns (DeletePostReply) {
+    option (google.api.http) = {
+      delete: "/api/v1/posts/{id}"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 获取文章详情
+  // 支持按 UUID 或 Slug 查询，优先 UUID，其次 Slug
+  // 公开接口，无需登录
+  // ---------------------------------------------------------------------------
+  rpc GetPost (GetPostRequest) returns (GetPostReply) {
+    option (google.api.http) = {
+      get: "/api/v1/posts/{identifier}"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 文章列表（分页 + 多维度筛选）
+  // 公开接口默认仅返回已发布文章
+  // 支持按分类、标签、排序筛选
+  // ---------------------------------------------------------------------------
+  rpc ListPosts (ListPostsRequest) returns (ListPostsReply) {
+    option (google.api.http) = {
+      get: "/api/v1/posts"
+    };
+  }
+
+  // ===========================================================================
+  // B. 文章状态
+  // ===========================================================================
+
+  // ---------------------------------------------------------------------------
+  // 发布文章（Draft → Published）
+  // 设置 published_at 时间戳，刷新缓存
+  // ---------------------------------------------------------------------------
+  rpc PublishPost (PublishPostRequest) returns (PublishPostReply) {
+    option (google.api.http) = {
+      post: "/api/v1/posts/{id}/publish"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 归档文章（Published → Archived）
+  // ---------------------------------------------------------------------------
+  rpc ArchivePost (ArchivePostRequest) returns (ArchivePostReply) {
+    option (google.api.http) = {
+      post: "/api/v1/posts/{id}/archive"
+      body: "*"
+    };
+  }
+
+  // ===========================================================================
+  // C. 全文搜索
+  // ===========================================================================
+
+  // ---------------------------------------------------------------------------
+  // 全文搜索（PostgreSQL tsvector + ts_rank）
+  // 按相关性降序，高亮标签由前端处理
+  // 仅搜索已发布文章
+  // ---------------------------------------------------------------------------
+  rpc SearchPosts (SearchPostsRequest) returns (SearchPostsReply) {
+    option (google.api.http) = {
+      get: "/api/v1/posts/search"
+    };
+  }
+
+  // ===========================================================================
+  // D. 互动
+  // ===========================================================================
+
+  // ---------------------------------------------------------------------------
+  // 点赞文章（幂等）
+  // 需要登录
+  // ---------------------------------------------------------------------------
+  rpc LikePost (LikePostRequest) returns (LikePostReply) {
+    option (google.api.http) = {
+      post: "/api/v1/posts/{id}/like"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 取消点赞（幂等）
+  // 需要登录
+  // ---------------------------------------------------------------------------
+  rpc UnlikePost (UnlikePostRequest) returns (UnlikePostReply) {
+    option (google.api.http) = {
+      delete: "/api/v1/posts/{id}/like"
+    };
+  }
+
+  // ===========================================================================
+  // E. 标签管理
+  // ===========================================================================
+
+  // ---------------------------------------------------------------------------
+  // 创建标签
+  // 需要 Author 及以上角色
+  // ---------------------------------------------------------------------------
+  rpc CreateTag (CreateTagRequest) returns (CreateTagReply) {
+    option (google.api.http) = {
+      post: "/api/v1/tags"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 全量标签列表（按文章数降序）
+  // ---------------------------------------------------------------------------
+  rpc ListTags (ListTagsRequest) returns (ListTagsReply) {
+    option (google.api.http) = {
+      get: "/api/v1/tags"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 删除标签
+  // 需要 Admin 角色
+  // ---------------------------------------------------------------------------
+  rpc DeleteTag (DeleteTagRequest) returns (DeleteTagReply) {
+    option (google.api.http) = {
+      delete: "/api/v1/tags/{id}"
+    };
+  }
+
+  // ===========================================================================
+  // F. 分类管理
+  // ===========================================================================
+
+  // ---------------------------------------------------------------------------
+  // 创建分类
+  // 需要 Admin 角色。支持设置父分类实现层级结构
+  // ---------------------------------------------------------------------------
+  rpc CreateCategory (CreateCategoryRequest) returns (CreateCategoryReply) {
+    option (google.api.http) = {
+      post: "/api/v1/categories"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 全量分类树（含嵌套子分类）
+  // 返回完整树形结构，前端可直接渲染下拉选择器
+  // ---------------------------------------------------------------------------
+  rpc ListCategories (ListCategoriesRequest) returns (ListCategoriesReply) {
+    option (google.api.http) = {
+      get: "/api/v1/categories"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 更新分类
+  // 需要 Admin 角色
+  // ---------------------------------------------------------------------------
+  rpc UpdateCategory (UpdateCategoryRequest) returns (UpdateCategoryReply) {
+    option (google.api.http) = {
+      put: "/api/v1/categories/{id}"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 删除分类（含子分类检查）
+  // 存在子分类时拒绝删除，需先移除子分类
+  // ---------------------------------------------------------------------------
+  rpc DeleteCategory (DeleteCategoryRequest) returns (DeleteCategoryReply) {
+    option (google.api.http) = {
+      delete: "/api/v1/categories/{id}"
+    };
+  }
+
+  // ===========================================================================
+  // G. 内部 RPC（供其他服务 gRPC 调用，不暴露 HTTP）
+  // ===========================================================================
+
+  // ---------------------------------------------------------------------------
+  // 原子增加浏览计数
+  // 由 API Gateway 在读文章时异步调用（或定时批量刷新）
+  // ---------------------------------------------------------------------------
+  rpc IncrementViewCount (IncrementViewCountRequest) returns (IncrementViewCountReply);
+
+  // ---------------------------------------------------------------------------
+  // 批量获取文章（解决列表关联查询的 N+1 问题）
+  // ---------------------------------------------------------------------------
+  rpc BatchGetPosts (BatchGetPostsRequest) returns (BatchGetPostsReply);
+}
+
+// =============================================================================
+// 请求 / 响应消息
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// CreatePost
+// -----------------------------------------------------------------------------
+message CreatePostRequest {
+  // 文章标题 (2-200 字符)
+  string title = 1 [(validate.rules).string = {
+    min_len: 2
+    max_len: 200
+  }];
+
+  // 文章正文（Markdown 格式）
+  string content = 2 [(validate.rules).string = {
+    min_len: 1
+    max_len: 100000
+  }];
+
+  // 文章摘要（可选，留空则自动生成前 200 字）
+  string excerpt = 3 [(validate.rules).string = {
+    max_len: 500
+  }];
+
+  // 封面图 URL（可选）
+  string cover_image = 4 [(validate.rules).string = {
+    max_len: 512
+  }];
+
+  // 分类 ID（可选）
+  uint64 category_id = 5;
+
+  // 标签名称列表（字符串，服务端自动查找或创建标签）
+  repeated string tag_names = 6 [(validate.rules).repeated = {
+    max_items: 20
+  }];
+}
+
+message CreatePostReply {
+  PostInfo post = 1;
+}
+
+// -----------------------------------------------------------------------------
+// UpdatePost
+// -----------------------------------------------------------------------------
+message UpdatePostRequest {
+  // 文章 ID
+  uint64 id = 1 [(validate.rules).uint64 = {
+    gt: 0
+  }];
+
+  // 文章标题（可选，不传则不修改）
+  string title = 2 [(validate.rules).string = {
+    max_len: 200
+  }];
+
+  // 文章正文（可选）
+  string content = 3 [(validate.rules).string = {
+    max_len: 100000
+  }];
+
+  // 文章摘要（可选）
+  string excerpt = 4 [(validate.rules).string = {
+    max_len: 500
+  }];
+
+  // 封面图 URL（可选）
+  string cover_image = 5 [(validate.rules).string = {
+    max_len: 512
+  }];
+
+  // 分类 ID（可选，传 0 表示取消分类）
+  uint64 category_id = 6;
+
+  // 标签名称列表（可选，传空列表表示移除所有标签）
+  // 注意：不传此字段（nil）表示不修改标签，传空列表（[]）表示清空标签
+  repeated string tag_names = 7 [(validate.rules).repeated = {
+    max_items: 20
+  }];
+}
+
+message UpdatePostReply {
+  PostInfo post = 1;
+}
+
+// -----------------------------------------------------------------------------
+// DeletePost
+// -----------------------------------------------------------------------------
+message DeletePostRequest {
+  uint64 id = 1 [(validate.rules).uint64 = {
+    gt: 0
+  }];
+}
+
+message DeletePostReply {}
+
+// -----------------------------------------------------------------------------
+// GetPost
+// -----------------------------------------------------------------------------
+message GetPostRequest {
+  // 文章标识符：UUID 或 Slug，优先按 UUID 匹配
+  string identifier = 1 [(validate.rules).string = {
+    min_len: 1
+    max_len: 200
+  }];
+}
+
+message GetPostReply {
+  PostInfo post = 1;
+}
+
+// -----------------------------------------------------------------------------
+// ListPosts
+// -----------------------------------------------------------------------------
+message ListPostsRequest {
+  // 页码（从 1 开始）
+  int32 page = 1 [(validate.rules).int32 = {
+    gte: 1
+    lte: 10000
+  }];
+
+  // 每页数量（1-50）
+  int32 page_size = 2 [(validate.rules).int32 = {
+    gte: 1
+    lte: 50
+  }];
+
+  // 状态筛选：draft / published / archived（空=公开接口默认 published）
+  string status = 3 [(validate.rules).string = {
+    in: ["", "draft", "published", "archived"]
+  }];
+
+  // 分类 ID 筛选
+  uint64 category_id = 4;
+
+  // 标签筛选（AND 语义：同时拥有所有指定标签的文章）
+  repeated string tags = 5;
+
+  // 排序字段：created_at / updated_at / published_at / view_count
+  string sort_by = 6 [(validate.rules).string = {
+    in: ["", "created_at", "updated_at", "published_at", "view_count", "is_top"]
+  }];
+
+  // 排序方向：asc / desc
+  string sort_order = 7 [(validate.rules).string = {
+    in: ["", "asc", "desc"]
+  }];
+}
+
+message ListPostsReply {
+  repeated PostInfo posts = 1; // 文章列表（不含正文，仅摘要）
+  int32 total             = 2; // 总记录数
+  int32 page              = 3; // 当前页码
+  int32 page_size         = 4; // 每页数量
+}
+
+// -----------------------------------------------------------------------------
+// PublishPost / ArchivePost
+// -----------------------------------------------------------------------------
+message PublishPostRequest {
+  uint64 id = 1 [(validate.rules).uint64 = {
+    gt: 0
+  }];
+}
+
+message PublishPostReply {
+  PostInfo post = 1;
+}
+
+message ArchivePostRequest {
+  uint64 id = 1 [(validate.rules).uint64 = {
+    gt: 0
+  }];
+}
+
+message ArchivePostReply {
+  PostInfo post = 1;
+}
+
+// -----------------------------------------------------------------------------
+// SearchPosts
+// -----------------------------------------------------------------------------
+message SearchPostsRequest {
+  // 搜索关键词（1-200 字符）
+  string keyword = 1 [(validate.rules).string = {
+    min_len: 1
+    max_len: 200
+  }];
+
+  int32 page      = 2 [(validate.rules).int32 = {
+    gte: 1
+    lte: 10000
+  }];
+
+  int32 page_size = 3 [(validate.rules).int32 = {
+    gte: 1
+    lte: 50
+  }];
+}
+
+message SearchPostsReply {
+  repeated PostInfo posts = 1;
+  int32 total             = 2; // 搜索结果总数
+}
+
+// -----------------------------------------------------------------------------
+// Like / Unlike
+// -----------------------------------------------------------------------------
+message LikePostRequest {
+  uint64 id = 1 [(validate.rules).uint64 = {
+    gt: 0
+  }];
+}
+
+message LikePostReply {}
+
+message UnlikePostRequest {
+  uint64 id = 1 [(validate.rules).uint64 = {
+    gt: 0
+  }];
+}
+
+message UnlikePostReply {}
+
+// -----------------------------------------------------------------------------
+// Tag
+// -----------------------------------------------------------------------------
+message CreateTagRequest {
+  // 标签名称（1-64 字符，唯一）
+  string name = 1 [(validate.rules).string = {
+    min_len: 1
+    max_len: 64
+  }];
+}
+
+message CreateTagReply {
+  TagInfo tag = 1;
+}
+
+message ListTagsRequest {}
+
+message ListTagsReply {
+  repeated TagInfo tags = 1;
+}
+
+message DeleteTagRequest {
+  uint64 id = 1 [(validate.rules).uint64 = {
+    gt: 0
+  }];
+}
+
+message DeleteTagReply {}
+
+// -----------------------------------------------------------------------------
+// Category
+// -----------------------------------------------------------------------------
+message CreateCategoryRequest {
+  // 分类名称
+  string name = 1 [(validate.rules).string = {
+    min_len: 1
+    max_len: 64
+  }];
+
+  // URL Slug（可选，留空自动从 name 生成）
+  string slug = 2 [(validate.rules).string = {
+    max_len: 64
+  }];
+
+  // 分类描述
+  string description = 3 [(validate.rules).string = {
+    max_len: 500
+  }];
+
+  // 父分类 ID（可选，0 或留空表示顶级分类）
+  uint64 parent_id = 4;
+
+  // 排序序号（数字越小越靠前）
+  int32 sort_order = 5;
+}
+
+message CreateCategoryReply {
+  CategoryInfo category = 1;
+}
+
+message ListCategoriesRequest {}
+
+message ListCategoriesReply {
+  repeated CategoryInfo categories = 1; // 分类树（顶层节点，Children 嵌套子节点）
+}
+
+message UpdateCategoryRequest {
+  uint64 id = 1 [(validate.rules).uint64 = {
+    gt: 0
+  }];
+
+  string name        = 2 [(validate.rules).string = {
+    min_len: 1
+    max_len: 64
+  }];
+
+  string slug        = 3 [(validate.rules).string = {
+    max_len: 64
+  }];
+
+  string description = 4 [(validate.rules).string = {
+    max_len: 500
+  }];
+
+  uint64 parent_id   = 5;
+
+  int32  sort_order  = 6;
+}
+
+message UpdateCategoryReply {
+  CategoryInfo category = 1;
+}
+
+message DeleteCategoryRequest {
+  uint64 id = 1 [(validate.rules).uint64 = {
+    gt: 0
+  }];
+}
+
+message DeleteCategoryReply {}
+
+// -----------------------------------------------------------------------------
+// 内部 RPC
+// -----------------------------------------------------------------------------
+message IncrementViewCountRequest {
+  uint64 id    = 1 [(validate.rules).uint64 = {
+    gt: 0
+  }];
+
+  int64  delta = 2; // 增量（通常为 1）
+}
+
+message IncrementViewCountReply {}
+
+message BatchGetPostsRequest {
+  repeated uint64 ids = 1 [(validate.rules).repeated = {
+    min_items: 1
+    max_items: 100
+  }];
+}
+
+message BatchGetPostsReply {
+  repeated PostInfo posts = 1;
+}
+
+// =============================================================================
+// 共享数据模型
+// =============================================================================
+
+// PostInfo — 文章详情/列表模型
+// 上下文决定 Content 是否填充：
+//   列表接口仅返回 title、excerpt、cover_image、计数等
+//   详情接口额外返回 content（Markdown 原始内容）
+message PostInfo {
+  // ---- 基本信息 ----
+  uint64 id               = 1;  // 内部自增 ID
+  string uuid             = 2;  // 对外 UUID
+  string title            = 3;  // 标题
+  string slug             = 4;  // URL Slug
+  string content          = 5;  // Markdown 正文（仅详情接口返回）
+  string excerpt          = 6;  // 摘要
+  string cover_image      = 7;  // 封面图 URL
+
+  // ---- 状态 ----
+  string status           = 8;  // draft / published / archived
+  uint64 author_id        = 9;  // 作者 ID
+  string author_name      = 10; // 作者用户名（由 gateway 聚合）
+
+  // ---- 关联 ----
+  uint64 category_id      = 11; // 分类 ID
+  string category_name    = 12; // 分类名称（由 gateway 聚合）
+  repeated TagInfo tags   = 13; // 标签列表
+
+  // ---- 计数 ----
+  int64 view_count        = 14; // 浏览数
+  int64 like_count        = 15; // 点赞数
+  int64 comment_count     = 16; // 评论数
+
+  // ---- 标记 ----
+  bool  is_top            = 17; // 是否置顶
+  bool  is_liked          = 18; // 当前用户是否已点赞（需登录）
+
+  // ---- 时间 ----
+  string published_at     = 19; // 发布时间 (ISO8601)
+  string created_at       = 20; // 创建时间 (ISO8601)
+  string updated_at       = 21; // 最后更新时间 (ISO8601)
+}
+
+// TagInfo — 标签
+message TagInfo {
+  uint64 id         = 1; // 标签 ID
+  string name       = 2; // 标签名称
+  string slug       = 3; // URL Slug
+  int64  post_count = 4; // 关联文章数
+}
+
+// CategoryInfo — 分类（支持树形嵌套）
+message CategoryInfo {
+  uint64 id                 = 1; // 分类 ID
+  string name               = 2; // 分类名称
+  string slug               = 3; // URL Slug
+  string description        = 4; // 分类描述
+  uint64 parent_id          = 5; // 父分类 ID（0=顶级）
+  int32  sort_order         = 6; // 排序序号
+  int64  post_count         = 7; // 关联文章数
+  repeated CategoryInfo children = 8; // 子分类列表（递归嵌套）
+}

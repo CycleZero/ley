@@ -1,0 +1,28 @@
+// comment_error.proto — 评论服务错误码枚举
+syntax = "proto3";
+
+package comment.v1;
+
+option go_package = "ley/api/comment/v1;commentv1";
+
+enum CommentErrorReason {
+  COMMENT_ERROR_UNSPECIFIED = 0;
+
+  // 评论不存在 — HTTP 404
+  COMMENT_NOT_FOUND          = 1;
+
+  // 评论内容过短或过长 — HTTP 422
+  COMMENT_CONTENT_INVALID    = 2;
+
+  // 非评论作者 — HTTP 403
+  NOT_COMMENT_OWNER          = 3;
+
+  // 嵌套深度超过限制（最大 5 层） — HTTP 422
+  MAX_DEPTH_EXCEEDED         = 4;
+
+  // 父评论不存在 — HTTP 404
+  PARENT_NOT_FOUND           = 5;
+
+  // 已执行过此操作（幂等检查） — HTTP 409
+  ALREADY_PERFORMED          = 6;
+}

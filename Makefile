@@ -7,13 +7,32 @@ ifeq ($(GOHOSTOS), windows)
 	#to see https://docs.microsoft.com/en-us/windows-server/administration/windows-commands/find.
 	#changed to use git-bash.exe to run find cli or other cli friendly, caused of every developer has a Git.
 	#Git_Bash= $(subst cmd\,bin\bash.exe,$(dir $(shell where git)))
-	Git_Bash=$(subst \,/,$(subst cmd\,bin\bash.exe,$(dir $(shell where git))))
-	INTERNAL_PROTO_FILES=$(shell $(Git_Bash) -c "find internal -name *.proto")
-	API_PROTO_FILES=$(shell $(Git_Bash) -c "find api -name *.proto")
+#	Git_Bash=$(subst \,/,$(subst cmd\,bin\bash.exe,$(dir $(shell where git))))
+	Git_Bash="/c/Program Files/Git/bin/bash.exe"
+	INTERNAL_PROTO_FILES=$(shell $(Git_Bash) -c "cd `pwd` && find app -name *.proto")
+	CONFIG_PROTO_FILES=$(shell $(Git_Bash) -c "cd `pwd` && find conf -name *.proto")
+	API_PROTO_FILES=$(shell $(Git_Bash) -c "cd `pwd` && find api -name *.proto")
+	INTERNAL_CONFIG_PROTO_FILES=$(shell $(Git_Bash) -c "cd `pwd` && find app -path '*/internal/conf/*.proto'")
 else
-	INTERNAL_PROTO_FILES=$(shell find internal -name *.proto)
+	INTERNAL_PROTO_FILES=$(shell find app -name *.proto)
 	API_PROTO_FILES=$(shell find api -name *.proto)
+	CONFIG_PROTO_FILES=$(shell find conf -name *.proto)
+	INTERNAL_CONFIG_PROTO_FILES=$(shell find app -path '*/internal/conf/*.proto')
 endif
+
+
+echo:
+	@echo "========== Makefile Variables =========="
+	@echo "GOHOSTOS: $(GOHOSTOS)"
+	@echo "GOPATH: $(GOPATH)"
+	@echo "VERSION: $(VERSION)"
+	@echo "Git_Bash: $(Git_Bash)"
+	@echo "INTERNAL_PROTO_FILES: $(INTERNAL_PROTO_FILES)"
+	@echo "API_PROTO_FILES: $(API_PROTO_FILES)"
+	@echo "CONFIG_PROTO_FILES: $(CONFIG_PROTO_FILES)"
+	@echo "INTERNAL_CONFIG_PROTO_FILES: $(INTERNAL_CONFIG_PROTO_FILES)"
+	@echo "=========================================="
+
 
 .PHONY: init
 # init env
@@ -24,31 +43,51 @@ init:
 	go install github.com/go-kratos/kratos/cmd/protoc-gen-go-http/v2@latest
 	go install github.com/google/gnostic/cmd/protoc-gen-openapi@latest
 	go install github.com/google/wire/cmd/wire@latest
+	go install github.com/envoyproxy/protoc-gen-validate@latest
+
+.PHONY: internal_proto
+# generate internal proto
+internal_proto:
+	protoc --proto_path=./app \
+  			--proto_path=./ \
+		   --proto_path=./third_party \
+		   --proto_path=./conf \
+		   --go_out=paths=source_relative:./app \
+		   $(INTERNAL_PROTO_FILES)
 
 .PHONY: config
-# generate internal proto
 config:
-	protoc --proto_path=./internal \
+	protoc --proto_path=./conf \
 	       --proto_path=./third_party \
- 	       --go_out=paths=source_relative:./internal \
-	       $(INTERNAL_PROTO_FILES)
+ 	       --go_out=paths=source_relative:./conf \
+	       $(CONFIG_PROTO_FILES)
+
+	protoc --proto_path=./app \
+			--proto_path=./ \
+	       --proto_path=./third_party \
+	       --proto_path=./conf \
+ 	       --go_out=paths=source_relative:./app \
+	       $(INTERNAL_CONFIG_PROTO_FILES)
+
+
+
 
 .PHONY: api
 # generate api proto
 api:
-	protoc --proto_path=./api \
+	protoc --proto_path=. \
 	       --proto_path=./third_party \
- 	       --go_out=paths=source_relative:./api \
- 	       --go-http_out=paths=source_relative:./api \
- 	       --go-grpc_out=paths=source_relative:./api \
+ 	       --go_out=paths=source_relative:. \
+ 	       --go-http_out=paths=source_relative:. \
+ 	       --go-grpc_out=paths=source_relative:. \
 	       --openapi_out=fq_schema_naming=true,default_response=false:. \
 	       $(API_PROTO_FILES)
 
 .PHONY: build
 # build
+#mkdir -p bin/ && go build -ldflags "-X main.Version=$(VERSION)" -o ./bin/ ./...
 build:
-	mkdir -p bin/ && go build -ldflags "-X main.Version=$(VERSION)" -o ./bin/ ./...
-
+	mkdir -p bin/ && go build -o ./bin/ ./...
 .PHONY: generate
 # generate
 generate:
@@ -61,6 +100,15 @@ all:
 	make api
 	make config
 	make generate
+
+
+wire:
+	wire gen $(shell find ./app -name wire.go -not -path "*/test/*" | xargs -n1 dirname | sort -u)
+
+rebuild: api config internal_proto wire build
+
+
+
 
 # show help
 help:

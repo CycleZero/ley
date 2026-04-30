@@ -2,11 +2,13 @@ package util
 
 import (
 	"context"
+	"os"
 	"time"
 
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/go-kratos/kratos/v2/registry"
 	grpcx "github.com/go-kratos/kratos/v2/transport/grpc"
+	"github.com/google/uuid"
 	"google.golang.org/grpc"
 )
 
@@ -46,4 +48,13 @@ func NewGrpcConn(dis registry.Discovery, serviceName string) (*grpc.ClientConn, 
 		grpcx.WithDiscovery(dis),
 		grpcx.WithEndpoint(DiscoveryEndpoint(serviceName)),
 	)
+}
+
+func ServiceId(serviceName string) string {
+	i := uuid.New().String()
+	host, err := os.Hostname()
+	if err != nil {
+		return serviceName + "." + i
+	}
+	return host + "." + serviceName + "." + i
 }

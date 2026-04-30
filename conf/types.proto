@@ -1,0 +1,15 @@
+syntax = "proto3";
+package ley.conf;
+
+option go_package = "ley/conf";
+
+import "google/protobuf/duration.proto";
+
+
+message Minio{
+  string endpoint = 1;
+  string access_key_id = 2;
+  string access_key_secret = 3;
+  string bucket_name = 4;
+//  string region = 5;
+}

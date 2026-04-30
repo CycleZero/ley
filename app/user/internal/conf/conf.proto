@@ -1,0 +1,102 @@
+// conf.proto — 用户服务配置定义
+//
+// 定义用户服务所需的远程配置结构（Data + JWT）。
+// Bootstrap（Server/Log/Etcd/Trace）由 conf/common.proto 统一定义，
+// 从根目录 configs/config.yaml 本地加载。
+//
+// 通过 make config 生成 conf.pb.go，配合 etcd 实现配置热更新。
+syntax = "proto3";
+
+package ley.app.user.internal.conf;
+
+option go_package = "ley/app/user/internal/conf";
+
+import "google/protobuf/duration.proto";
+import "conf/types.proto";
+
+// ---------------------------------------------------------------------------
+// Config — 用户服务远程配置（由 etcd 下发，可动态更新）
+// ---------------------------------------------------------------------------
+message Config {
+  // JWT 令牌配置
+  Jwt jwt = 1;
+
+  // 数据源配置（数据库 + 缓存）
+  Data data = 2;
+
+  // MinIO 对象存储（头像上传，可选）
+  ley.conf.Minio minio = 3;
+}
+
+// ---------------------------------------------------------------------------
+// Jwt — 令牌生成与校验配置
+// ---------------------------------------------------------------------------
+message Jwt {
+  // HMAC-SHA256 签名密钥（生产环境务必替换为强随机字符串）
+  string secret = 1;
+
+  // AccessToken 过期时间
+  google.protobuf.Duration access_ttl = 2;
+
+  // RefreshToken 过期时间
+  google.protobuf.Duration refresh_ttl = 3;
+
+  // 令牌签发者标识
+  string issuer = 4;
+}
+
+// ---------------------------------------------------------------------------
+// Data — 数据源配置
+// ---------------------------------------------------------------------------
+message Data {
+
+  // Database — PostgreSQL 连接配置
+  // 使用 "user" Schema 存储用户数据，与其他服务逻辑隔离
+  message Database {
+    // 数据库驱动：postgres / mysql
+    string driver = 1;
+
+    // 数据库主机地址
+    string host = 2;
+
+    // 数据库端口
+    int32 port = 3;
+
+    // 数据库名称
+    string database = 4;
+
+    // 数据库用户名
+    string username = 5;
+
+    // 数据库密码
+    string password = 6;
+  }
+
+  // Redis — Redis 连接配置
+  // 用于用户详情缓存、JWT 黑名单、登录频率限制
+  message Redis {
+    // 连接协议：tcp / unix
+    string network = 1;
+
+    // Redis 主机地址
+    string host = 2;
+
+    // Redis 端口
+    int32 port = 3;
+
+    // Redis 密码（留空表示无密码）
+    string password = 4;
+
+    // Redis 数据库编号（0-15）
+    int32 db = 5;
+
+    // 读取超时
+    google.protobuf.Duration read_timeout = 6;
+
+    // 写入超时
+    google.protobuf.Duration write_timeout = 7;
+  }
+
+  Database database = 1;
+  Redis redis = 2;
+}

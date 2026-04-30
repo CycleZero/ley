@@ -1,0 +1,284 @@
+// comment.proto — 评论服务接口定义
+//
+// 定义评论创建、编辑、删除、查询（含树形结构）、审核等 RPC。
+// 评论支持嵌套回复（通过 parent_id 实现），最大深度 5 层。
+syntax = "proto3";
+
+package comment.v1;
+
+import "google/api/annotations.proto";
+import "validate/validate.proto";
+
+option go_package = "ley/api/comment/v1;commentv1";
+
+// =============================================================================
+// CommentService — 评论服务
+//
+// 功能分组：
+//   A. 评论 CRUD  — CreateComment / UpdateComment / DeleteComment
+//   B. 评论查询   — ListComments（返回树形结构）
+//   C. 审核管理   — ApproveComment / RejectComment / MarkSpam
+//   D. 内部 RPC   — CountByPost / BatchDeleteByPost
+// =============================================================================
+service CommentService {
+
+  // ===========================================================================
+  // A. 评论 CRUD
+  // ===========================================================================
+
+  // ---------------------------------------------------------------------------
+  // 创建评论（支持顶级评论和回复）
+  // 顶级评论：不传 parent_id 或传 0
+  // 回复：传被回复的评论 ID 到 parent_id
+  // 创建后默认状态为 Pending，需管理员审核后公开可见
+  // ---------------------------------------------------------------------------
+  rpc CreateComment (CreateCommentRequest) returns (CreateCommentReply) {
+    option (google.api.http) = {
+      post: "/api/v1/posts/{post_id}/comments"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 更新评论内容
+  // 仅作者可修改自己的评论，修改后状态不改变
+  // ---------------------------------------------------------------------------
+  rpc UpdateComment (UpdateCommentRequest) returns (UpdateCommentReply) {
+    option (google.api.http) = {
+      put: "/api/v1/comments/{id}"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 删除评论（软删除）
+  // 仅作者可删除自己的评论，或 Admin 可删除任意评论
+  // ---------------------------------------------------------------------------
+  rpc DeleteComment (DeleteCommentRequest) returns (DeleteCommentReply) {
+    option (google.api.http) = {
+      delete: "/api/v1/comments/{id}"
+    };
+  }
+
+  // ===========================================================================
+  // B. 评论查询
+  // ===========================================================================
+
+  // ---------------------------------------------------------------------------
+  // 查询文章下所有已通过审核的评论（分页 + 树形结构）
+  // 返回平铺的评论列表，同时提供 Children 字段实现树形嵌套
+  // 注意：只返回 status = approved 的评论
+  // ---------------------------------------------------------------------------
+  rpc ListComments (ListCommentsRequest) returns (ListCommentsReply) {
+    option (google.api.http) = {
+      get: "/api/v1/posts/{post_id}/comments"
+    };
+  }
+
+  // ===========================================================================
+  // C. 审核管理
+  // ===========================================================================
+
+  // ---------------------------------------------------------------------------
+  // 审核通过评论（Pending → Approved）
+  // 需要 Admin 角色
+  // ---------------------------------------------------------------------------
+  rpc ApproveComment (ApproveCommentRequest) returns (ApproveCommentReply) {
+    option (google.api.http) = {
+      post: "/api/v1/comments/{id}/approve"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 拒绝评论（Pending → Deleted）
+  // 需要 Admin 角色
+  // ---------------------------------------------------------------------------
+  rpc RejectComment (RejectCommentRequest) returns (RejectCommentReply) {
+    option (google.api.http) = {
+      post: "/api/v1/comments/{id}/reject"
+      body: "*"
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // 标记为垃圾评论（→ Spam）
+  // 需要 Admin 角色
+  // ---------------------------------------------------------------------------
+  rpc MarkSpam (MarkSpamRequest) returns (MarkSpamReply) {
+    option (google.api.http) = {
+      post: "/api/v1/comments/{id}/spam"
+      body: "*"
+    };
+  }
+
+  // ===========================================================================
+  // D. 内部 RPC（供其他服务 gRPC 调用，不暴露 HTTP）
+  // ===========================================================================
+
+  // ---------------------------------------------------------------------------
+  // 统计文章已通过审核的评论数
+  // 由 Post 服务调用用于展示评论计数
+  // ---------------------------------------------------------------------------
+  rpc CountByPost (CountByPostRequest) returns (CountByPostReply);
+
+  // ---------------------------------------------------------------------------
+  // 批量删除文章下的所有评论（文章删除时的级联操作）
+  // 由 Post 服务通过 NATS 事件触发
+  // ---------------------------------------------------------------------------
+  rpc BatchDeleteByPost (BatchDeleteByPostRequest) returns (BatchDeleteByPostReply);
+}
+
+// =============================================================================
+// 请求 / 响应消息
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// CreateComment
+// -----------------------------------------------------------------------------
+message CreateCommentRequest {
+  // 所属文章 ID
+  uint64 post_id = 1 [(validate.rules).uint64 = {
+    gt: 0
+  }];
+
+  // 父评论 ID（可选，0 或不传表示顶级评论）
+  uint64 parent_id = 2;
+
+  // 评论内容（1-2000 字符）
+  string content = 3 [(validate.rules).string = {
+    min_len: 1
+    max_len: 2000
+  }];
+}
+
+message CreateCommentReply {
+  CommentInfo comment = 1;
+}
+
+// -----------------------------------------------------------------------------
+// UpdateComment
+// -----------------------------------------------------------------------------
+message UpdateCommentRequest {
+  uint64 id = 1 [(validate.rules).uint64 = {
+    gt: 0
+  }];
+
+  string content = 2 [(validate.rules).string = {
+    min_len: 1
+    max_len: 2000
+  }];
+}
+
+message UpdateCommentReply {
+  CommentInfo comment = 1;
+}
+
+// -----------------------------------------------------------------------------
+// DeleteComment
+// -----------------------------------------------------------------------------
+message DeleteCommentRequest {
+  uint64 id = 1 [(validate.rules).uint64 = {
+    gt: 0
+  }];
+}
+
+message DeleteCommentReply {}
+
+// -----------------------------------------------------------------------------
+// ListComments
+// -----------------------------------------------------------------------------
+message ListCommentsRequest {
+  uint64 post_id = 1 [(validate.rules).uint64 = {
+    gt: 0
+  }];
+
+  int32 page      = 2 [(validate.rules).int32 = {
+    gte: 1
+    lte: 10000
+  }];
+
+  int32 page_size = 3 [(validate.rules).int32 = {
+    gte: 1
+    lte: 50
+  }];
+}
+
+message ListCommentsReply {
+  repeated CommentNode comments = 1; // 树形评论列表（仅顶级节点，Children 嵌套回复）
+  int32 total                   = 2; // 总评论数（不分子评论）
+}
+
+// -----------------------------------------------------------------------------
+// Approve / Reject / MarkSpam
+// -----------------------------------------------------------------------------
+message ApproveCommentRequest {
+  uint64 id = 1 [(validate.rules).uint64 = {
+    gt: 0
+  }];
+}
+
+message ApproveCommentReply {}
+
+message RejectCommentRequest {
+  uint64 id = 1 [(validate.rules).uint64 = {
+    gt: 0
+  }];
+}
+
+message RejectCommentReply {}
+
+message MarkSpamRequest {
+  uint64 id = 1 [(validate.rules).uint64 = {
+    gt: 0
+  }];
+}
+
+message MarkSpamReply {}
+
+// -----------------------------------------------------------------------------
+// 内部 RPC
+// -----------------------------------------------------------------------------
+message CountByPostRequest {
+  uint64 post_id = 1 [(validate.rules).uint64 = {
+    gt: 0
+  }];
+}
+
+message CountByPostReply {
+  int64 count = 1;
+}
+
+message BatchDeleteByPostRequest {
+  uint64 post_id = 1 [(validate.rules).uint64 = {
+    gt: 0
+  }];
+}
+
+message BatchDeleteByPostReply {}
+
+// =============================================================================
+// 共享数据模型
+// =============================================================================
+
+// CommentInfo — 评论详情
+message CommentInfo {
+  uint64 id          = 1;  // 评论 ID
+  string uuid        = 2;  // 对外 UUID
+  uint64 post_id     = 3;  // 所属文章 ID
+  uint64 author_id   = 4;  // 评论者 ID
+  string author_name = 5;  // 评论者用户名（由 gateway 聚合）
+  string author_avatar = 6;// 评论者头像（由 gateway 聚合）
+  uint64 parent_id   = 7;  // 父评论 ID（0=顶级评论）
+  string content     = 8;  // 评论内容
+  string status      = 9;  // 状态: pending / approved / spam / deleted
+  string created_at  = 10; // 创建时间 (ISO8601)
+  string updated_at  = 11; // 最后更新时间 (ISO8601)
+}
+
+// CommentNode — 评论树节点
+// 顶级评论列表中的每个元素，通过 Children 字段携带嵌套回复
+message CommentNode {
+  CommentInfo comment               = 1; // 当前评论
+  repeated CommentNode children     = 2; // 子评论列表（递归结构）
+}

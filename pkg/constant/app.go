@@ -4,12 +4,11 @@ const AppName = "ley"
 
 const DataDir = "./data"
 const (
-	ServiceNameComment      = "comment"
-	ServiceNameUser         = "user"
-	ServiceNameForum        = "forum"
-	ServiceNameNotification = "notification"
-	ServiceNameGreeter      = "greeter"
-	ServiceNameAttachment   = "attachment"
+	ServiceNameComment    = "comment"
+	ServiceNameUser       = "user"
+	ServiceNamePost       = "post"
+	ServiceNameGreeter    = "greeter"
+	ServiceNameAttachment = "attachment"
 )
 
 const (

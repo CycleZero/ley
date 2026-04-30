@@ -1,0 +1,41 @@
+// user_error.proto — 用户服务错误码枚举
+//
+// 定义用户服务可能返回的业务错误码。
+// 通过 Kratos Error API 映射为 HTTP 状态码。
+syntax = "proto3";
+
+package user.v1;
+
+option go_package = "ley/api/user/v1;userv1";
+
+enum UserErrorReason {
+  // 无错误（protobuf 要求必须有 0 值）
+  USER_ERROR_UNSPECIFIED = 0;
+
+  // 用户名已被占用 — HTTP 409
+  USERNAME_TAKEN = 1;
+
+  // 邮箱已被注册 — HTTP 409
+  EMAIL_TAKEN = 2;
+
+  // 用户名或密码错误 — HTTP 401
+  BAD_CREDENTIALS = 3;
+
+  // 账号已被禁用 — HTTP 403
+  ACCOUNT_DISABLED = 4;
+
+  // 用户不存在 — HTTP 404
+  USER_NOT_FOUND = 5;
+
+  // 密码强度不足 — HTTP 422
+  PASSWORD_TOO_WEAK = 6;
+
+  // 用户名格式不合法 — HTTP 422
+  USERNAME_INVALID = 7;
+
+  // Token 无效或已过期 — HTTP 401
+  TOKEN_INVALID = 8;
+
+  // Token 已在黑名单 — HTTP 401
+  TOKEN_BLACKLISTED = 9;
+}
