@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package blog.conf;
+
+option go_package = "ley/app/blog/internal/conf;conf";
+
+import "google/protobuf/duration.proto";
+import "conf/types.proto";
+
+message Config {
+  Data data = 1;
+  Nats nats = 2;
+  ley.conf.Minio minio = 3;
+}
+
+message Nats {
+  string addr = 1;
+  bool enable_jetstream = 2;
+}
+
+message Data {
+  Database database = 1;
+  Redis redis = 2;
+
+  message Database {
+    string driver = 1;
+    string host = 2;
+    int32 port = 3;
+    string database = 4;
+    string username = 5;
+    string password = 6;
+  }
+
+  message Redis {
+    string host = 1;
+    int32 port = 2;
+    string password = 3;
+    int32 db = 4;
+  }
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	kerrors "github.com/go-kratos/kratos/v2/errors"
 	"github.com/go-kratos/kratos/v2/log"
 )
 
@@ -65,6 +66,10 @@ type CommentRepo interface {
 // =============================================================================
 // CommentUseCase
 // =============================================================================
+
+var (
+	ErrCommentNotFound = kerrors.NotFound("COMMENT_NOT_FOUND", "评论不存在")
+)
 
 type CommentUseCase struct {
 	repo     CommentRepo

@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package auth.conf;
+
+option go_package = "ley/app/auth/internal/conf;conf";
+
+import "google/protobuf/duration.proto";
+
+message Config {
+  JWT jwt = 1;
+  Data data = 2;
+}
+
+message JWT {
+  string secret = 1;
+  google.protobuf.Duration access_ttl = 2;
+  google.protobuf.Duration refresh_ttl = 3;
+  string issuer = 4;
+}
+
+message Data {
+  Database database = 1;
+  Redis redis = 2;
+
+  message Database {
+    string driver = 1;
+    string host = 2;
+    int32 port = 3;
+    string database = 4;
+    string username = 5;
+    string password = 6;
+  }
+
+  message Redis {
+    string host = 1;
+    int32 port = 2;
+    string password = 3;
+    int32 db = 4;
+  }
+}
