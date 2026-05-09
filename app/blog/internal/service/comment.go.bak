@@ -1,0 +1,98 @@
+package service
+
+import (
+	"context"
+
+	blogv1 "ley/api/blog/v1"
+	"ley/app/blog/internal/biz"
+
+	"github.com/go-kratos/kratos/v2/log"
+)
+
+type CommentService struct {
+	blogv1.UnimplementedCommentServiceServer
+	uc  *biz.CommentUseCase
+	log *log.Helper
+}
+
+func NewCommentService(uc *biz.CommentUseCase, logger log.Logger) *CommentService {
+	return &CommentService{uc: uc, log: log.NewHelper(logger)}
+}
+
+func (s *CommentService) CreateComment(ctx context.Context, req *blogv1.CreateCommentRequest) (*blogv1.CreateCommentReply, error) {
+	c, err := s.uc.CreateComment(ctx, uint(req.ArticleId), toUintPtr(req.ParentId), req.Content)
+	if err != nil {
+		return nil, err
+	}
+	return &blogv1.CreateCommentReply{Comment: toCommentInfo(c)}, nil
+}
+
+func (s *CommentService) UpdateComment(ctx context.Context, req *blogv1.UpdateCommentRequest) (*blogv1.UpdateCommentReply, error) {
+	c, err := s.uc.UpdateComment(ctx, uint(req.Id), req.Content)
+	if err != nil {
+		return nil, err
+	}
+	return &blogv1.UpdateCommentReply{Comment: toCommentInfo(c)}, nil
+}
+
+func (s *CommentService) DeleteComment(ctx context.Context, req *blogv1.DeleteCommentRequest) (*blogv1.DeleteCommentReply, error) {
+	return &blogv1.DeleteCommentReply{}, s.uc.DeleteComment(ctx, uint(req.Id))
+}
+
+func (s *CommentService) ListComments(ctx context.Context, req *blogv1.ListCommentsRequest) (*blogv1.ListCommentsReply, error) {
+	nodes, total, err := s.uc.ListComments(ctx, uint(req.ArticleId), int(req.Page), int(req.PageSize))
+	if err != nil {
+		return nil, err
+	}
+	return &blogv1.ListCommentsReply{Comments: toCommentNodes(nodes), Total: total}, nil
+}
+
+func (s *CommentService) ApproveComment(ctx context.Context, req *blogv1.ApproveCommentRequest) (*blogv1.ApproveCommentReply, error) {
+	return &blogv1.ApproveCommentReply{}, s.uc.ApproveComment(ctx, uint(req.Id))
+}
+
+func (s *CommentService) MarkCommentSpam(ctx context.Context, req *blogv1.MarkCommentSpamRequest) (*blogv1.MarkCommentSpamReply, error) {
+	return &blogv1.MarkCommentSpamReply{}, s.uc.MarkCommentSpam(ctx, uint(req.Id))
+}
+
+func toCommentInfo(c *biz.Comment) *blogv1.CommentInfo {
+	if c == nil {
+		return nil
+	}
+	return &blogv1.CommentInfo{
+		Id: uint64(c.ID), ArticleId: uint64(c.ArticleID), AuthorId: uint64(c.AuthorID),
+		AuthorName: c.AuthorName, AuthorAvatar: c.AuthorAvatar, ParentId: derefUint(c.ParentID),
+		Depth: int32(c.Depth), Content: c.Content, Status: commentStatusStr(c.Status),
+		CreatedAt: c.CreatedAt.Format("2006-01-02T15:04:05Z"), UpdatedAt: c.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+	}
+}
+
+func toCommentNode(n *biz.CommentNode) *blogv1.CommentNode {
+	if n == nil {
+		return nil
+	}
+	node := &blogv1.CommentNode{Comment: toCommentInfo(n.Comment)}
+	for _, ch := range n.Children {
+		node.Children = append(node.Children, toCommentNode(ch))
+	}
+	return node
+}
+
+func toCommentNodes(nodes []*biz.CommentNode) []*blogv1.CommentNode {
+	result := make([]*blogv1.CommentNode, 0, len(nodes))
+	for _, n := range nodes {
+		result = append(result, toCommentNode(n))
+	}
+	return result
+}
+
+func commentStatusStr(s biz.CommentStatus) string {
+	switch s {
+	case biz.CommentStatusApproved:
+		return "approved"
+	case biz.CommentStatusSpam:
+		return "spam"
+	default:
+		return "pending"
+	}
+}

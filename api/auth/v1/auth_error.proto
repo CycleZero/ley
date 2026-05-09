@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package api.auth.v1;
+
+option go_package = "ley/api/auth/v1;authv1";
+
+enum AuthErrorReason {
+  AUTH_ERROR_UNSPECIFIED = 0;
+  USERNAME_TAKEN = 1;
+  EMAIL_TAKEN = 2;
+  BAD_CREDENTIALS = 3;
+  ACCOUNT_DISABLED = 4;
+  USER_NOT_FOUND = 5;
+  TOKEN_INVALID = 6;
+  TOKEN_BLACKLISTED = 7;
+}

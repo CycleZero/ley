@@ -1,0 +1,337 @@
+syntax = "proto3";
+
+package api.blog.v1;
+
+option go_package = "ley/api/blog/v1;blogv1";
+
+import "google/api/annotations.proto";
+import "openapi/v3/annotations.proto";
+import "api/common/v1/common.proto";
+
+option (openapi.v3.document) = {
+  info: {
+    title: "Ley Blog Service"
+    version: "1.0.0"
+    description: "博客服务 — 文章、评论、标签、分类、文件、站点配置"
+  }
+  tags: { name: "文章" description: "文章CRUD、发布、归档、搜索" }
+  tags: { name: "点赞" description: "点赞与取消点赞" }
+  tags: { name: "评论" description: "评论CRUD、审核" }
+  tags: { name: "标签" description: "标签创建、列表、删除" }
+  tags: { name: "分类" description: "分类管理（树形结构）" }
+  tags: { name: "文件" description: "文件上传、下载、删除" }
+  tags: { name: "站点配置" description: "站点全局配置、背景图、歌单" }
+};
+
+service ArticleService {
+  rpc CreateArticle(CreateArticleRequest) returns (CreateArticleReply) {
+    option (google.api.http) = { post: "/api/v1/articles" body: "*" };
+    option (openapi.v3.operation) = { summary: "创建文章" description: "创建一篇新文章（草稿状态），可选择关联标签和分类" tags: "文章" };
+  }
+  rpc UpdateArticle(UpdateArticleRequest) returns (UpdateArticleReply) {
+    option (google.api.http) = { put: "/api/v1/articles/{id}" body: "*" };
+    option (openapi.v3.operation) = { summary: "更新文章" description: "部分更新文章字段，nil字段保持不变，可全量替换标签" tags: "文章" };
+  }
+  rpc DeleteArticle(DeleteArticleRequest) returns (DeleteArticleReply) {
+    option (google.api.http) = { delete: "/api/v1/articles/{id}" };
+    option (openapi.v3.operation) = { summary: "删除文章" description: "软删除文章，已发布文章会同步调整分类和标签的计数" tags: "文章" };
+  }
+  rpc GetArticle(GetArticleRequest) returns (GetArticleReply) {
+    option (google.api.http) = { get: "/api/v1/articles/{identifier}" };
+    option (openapi.v3.operation) = { summary: "获取文章" description: "按ID或Slug获取文章详情，认证用户会填充点赞状态" tags: "文章" };
+  }
+  rpc ListArticles(ListArticlesRequest) returns (ListArticlesReply) {
+    option (google.api.http) = { get: "/api/v1/articles" };
+    option (openapi.v3.operation) = { summary: "文章列表" description: "分页查询文章列表，支持按状态、分类、标签、作者过滤，支持排序" tags: "文章" };
+  }
+  rpc PublishArticle(PublishArticleRequest) returns (PublishArticleReply) {
+    option (google.api.http) = { post: "/api/v1/articles/{id}/publish" body: "*" };
+    option (openapi.v3.operation) = { summary: "发布文章" description: "将草稿发布为公开状态，记录发布时间，更新分类和标签计数" tags: "文章" };
+  }
+  rpc ArchiveArticle(ArchiveArticleRequest) returns (ArchiveArticleReply) {
+    option (google.api.http) = { post: "/api/v1/articles/{id}/archive" body: "*" };
+    option (openapi.v3.operation) = { summary: "归档文章" description: "将文章归档（不展示在默认列表），减少分类和标签计数" tags: "文章" };
+  }
+  rpc SearchArticles(SearchArticlesRequest) returns (SearchArticlesReply) {
+    option (google.api.http) = { get: "/api/v1/articles/search" };
+    option (openapi.v3.operation) = { summary: "全文搜索" description: "预留接口，后续接入搜索引擎" tags: "文章" };
+  }
+  rpc LikeArticle(LikeArticleRequest) returns (LikeArticleReply) {
+    option (google.api.http) = { post: "/api/v1/articles/{id}/like" body: "*" };
+    option (openapi.v3.operation) = { summary: "点赞文章" description: "为文章点赞（幂等，重复点赞不报错）" tags: "点赞" };
+  }
+  rpc UnlikeArticle(UnlikeArticleRequest) returns (UnlikeArticleReply) {
+    option (google.api.http) = { delete: "/api/v1/articles/{id}/like" };
+    option (openapi.v3.operation) = { summary: "取消点赞" description: "取消对文章的点赞（幂等）" tags: "点赞" };
+  }
+}
+
+service CommentService {
+  rpc CreateComment(CreateCommentRequest) returns (CreateCommentReply) {
+    option (google.api.http) = { post: "/api/v1/articles/{article_id}/comments" body: "*" };
+    option (openapi.v3.operation) = { summary: "发表评论" description: "对文章发表顶级评论或回复，嵌套深度不超过5层" tags: "评论" };
+  }
+  rpc UpdateComment(UpdateCommentRequest) returns (UpdateCommentReply) {
+    option (google.api.http) = { put: "/api/v1/comments/{id}" body: "*" };
+    option (openapi.v3.operation) = { summary: "编辑评论" description: "编辑自己发表的评论内容" tags: "评论" };
+  }
+  rpc DeleteComment(DeleteCommentRequest) returns (DeleteCommentReply) {
+    option (google.api.http) = { delete: "/api/v1/comments/{id}" };
+    option (openapi.v3.operation) = { summary: "删除评论" description: "软删除自己发表的评论" tags: "评论" };
+  }
+  rpc ListComments(ListCommentsRequest) returns (ListCommentsReply) {
+    option (google.api.http) = { get: "/api/v1/articles/{article_id}/comments" };
+    option (openapi.v3.operation) = { summary: "评论列表" description: "获取文章的评论列表（树形结构）" tags: "评论" };
+  }
+  rpc ApproveComment(ApproveCommentRequest) returns (ApproveCommentReply) {
+    option (google.api.http) = { post: "/api/v1/comments/{id}/approve" body: "*" };
+    option (openapi.v3.operation) = { summary: "审核通过评论" description: "管理员将评论设为已通过审核状态" tags: "评论" };
+  }
+  rpc MarkCommentSpam(MarkCommentSpamRequest) returns (MarkCommentSpamReply) {
+    option (google.api.http) = { post: "/api/v1/comments/{id}/spam" body: "*" };
+    option (openapi.v3.operation) = { summary: "标记垃圾评论" description: "管理员将评论标记为垃圾" tags: "评论" };
+  }
+}
+
+service TagService {
+  rpc CreateTag(CreateTagRequest) returns (CreateTagReply) {
+    option (google.api.http) = { post: "/api/v1/tags" body: "*" };
+    option (openapi.v3.operation) = { summary: "创建标签" description: "创建新标签，名称唯一" tags: "标签" };
+  }
+  rpc ListTags(ListTagsRequest) returns (ListTagsReply) {
+    option (google.api.http) = { get: "/api/v1/tags" };
+    option (openapi.v3.operation) = { summary: "全量标签列表" description: "获取所有标签，按文章数降序排列" tags: "标签" };
+  }
+  rpc DeleteTag(DeleteTagRequest) returns (DeleteTagReply) {
+    option (google.api.http) = { delete: "/api/v1/tags/{id}" };
+    option (openapi.v3.operation) = { summary: "删除标签" description: "软删除标签" tags: "标签" };
+  }
+}
+
+service CategoryService {
+  rpc CreateCategory(CreateCategoryRequest) returns (CreateCategoryReply) {
+    option (google.api.http) = { post: "/api/v1/categories" body: "*" };
+    option (openapi.v3.operation) = { summary: "创建分类" description: "创建新分类，可指定父分类和排序权重" tags: "分类" };
+  }
+  rpc ListCategories(ListCategoriesRequest) returns (ListCategoriesReply) {
+    option (google.api.http) = { get: "/api/v1/categories" };
+    option (openapi.v3.operation) = { summary: "分类树" description: "获取完整分类树（嵌套层级结构）" tags: "分类" };
+  }
+  rpc UpdateCategory(UpdateCategoryRequest) returns (UpdateCategoryReply) {
+    option (google.api.http) = { put: "/api/v1/categories/{id}" body: "*" };
+    option (openapi.v3.operation) = { summary: "更新分类" description: "更新分类信息，不可构成循环引用" tags: "分类" };
+  }
+  rpc DeleteCategory(DeleteCategoryRequest) returns (DeleteCategoryReply) {
+    option (google.api.http) = { delete: "/api/v1/categories/{id}" };
+    option (openapi.v3.operation) = { summary: "删除分类" description: "删除分类（要求无子分类且无关联文章）" tags: "分类" };
+  }
+}
+
+service FileService {
+  rpc UploadFile(UploadFileRequest) returns (UploadFileReply) {
+    option (google.api.http) = { post: "/api/v1/files/upload" body: "*" };
+    option (openapi.v3.operation) = { summary: "上传文件" description: "上传文件（经过6步安全校验链）" tags: "文件" };
+  }
+  rpc GetFile(GetFileRequest) returns (GetFileReply) {
+    option (google.api.http) = { get: "/api/v1/files/{id}" };
+    option (openapi.v3.operation) = { summary: "获取文件信息" description: "获取文件的元数据，认证用户只能访问自己的文件" tags: "文件" };
+  }
+  rpc DeleteFile(DeleteFileRequest) returns (DeleteFileReply) {
+    option (google.api.http) = { delete: "/api/v1/files/{id}" };
+    option (openapi.v3.operation) = { summary: "删除文件" description: "删除文件（需要是上传者本人）" tags: "文件" };
+  }
+  rpc ListFiles(ListFilesRequest) returns (ListFilesReply) {
+    option (google.api.http) = { get: "/api/v1/files" };
+    option (openapi.v3.operation) = { summary: "文件列表" description: "获取当前用户上传的文件列表（分页）" tags: "文件" };
+  }
+  rpc GetPresignedPutURL(GetPresignedPutURLRequest) returns (GetPresignedPutURLReply) {
+    option (google.api.http) = { get: "/api/v1/files/presigned-upload" };
+    option (openapi.v3.operation) = { summary: "获取预签名上传URL" description: "获取MinIO预签名上传URL（1小时有效），客户端可直接上传" tags: "文件" };
+  }
+}
+
+service SiteService {
+  rpc GetSiteConfig(GetSiteConfigRequest) returns (GetSiteConfigReply) {
+    option (google.api.http) = { get: "/api/v1/site/config" };
+    option (openapi.v3.operation) = { summary: "获取站点配置" description: "获取站点全局配置（公开）" tags: "站点配置" };
+  }
+  rpc UpdateSiteConfig(UpdateSiteConfigRequest) returns (UpdateSiteConfigReply) {
+    option (google.api.http) = { put: "/api/v1/site/config" body: "*" };
+    option (openapi.v3.operation) = { summary: "更新站点配置" description: "更新站点全局配置（管理员）" tags: "站点配置" };
+  }
+  rpc ListBackgrounds(ListBackgroundsRequest) returns (ListBackgroundsReply) {
+    option (google.api.http) = { get: "/api/v1/site/backgrounds" };
+    option (openapi.v3.operation) = { summary: "背景图片列表" description: "获取所有背景图片（公开）" tags: "站点配置" };
+  }
+  rpc UploadBackground(UploadBackgroundRequest) returns (UploadBackgroundReply) {
+    option (google.api.http) = { post: "/api/v1/site/backgrounds" body: "*" };
+    option (openapi.v3.operation) = { summary: "上传背景图片" description: "上传新的背景图片（管理员）" tags: "站点配置" };
+  }
+  rpc DeleteBackground(DeleteBackgroundRequest) returns (DeleteBackgroundReply) {
+    option (google.api.http) = { delete: "/api/v1/site/backgrounds/{id}" };
+    option (openapi.v3.operation) = { summary: "删除背景图片" description: "删除指定背景图片（管理员）" tags: "站点配置" };
+  }
+  rpc SetActiveBackground(SetActiveBackgroundRequest) returns (SetActiveBackgroundReply) {
+    option (google.api.http) = { put: "/api/v1/site/backgrounds/{id}/active" body: "*" };
+    option (openapi.v3.operation) = { summary: "设为当前背景" description: "将指定背景图片设为当前激活状态（同一时间仅一个激活）" tags: "站点配置" };
+  }
+  rpc GetMusicPlaylist(GetMusicPlaylistRequest) returns (GetMusicPlaylistReply) {
+    option (google.api.http) = { get: "/api/v1/site/music/playlist" };
+    option (openapi.v3.operation) = { summary: "获取歌单" description: "获取当前歌单（公开）" tags: "站点配置" };
+  }
+  rpc UpdateMusicPlaylist(UpdateMusicPlaylistRequest) returns (UpdateMusicPlaylistReply) {
+    option (google.api.http) = { put: "/api/v1/site/music/playlist" body: "*" };
+    option (openapi.v3.operation) = { summary: "更新歌单" description: "更新歌单（管理员），音乐文件存储为外部链接" tags: "站点配置" };
+  }
+}
+
+// =============================================================================
+// 消息定义
+// =============================================================================
+
+message CreateArticleRequest { string title = 1; string content = 2; string excerpt = 3; string cover_image = 4; uint64 category_id = 5; repeated string tag_names = 6; }
+message CreateArticleReply { ArticleInfo article = 1; }
+message UpdateArticleRequest { uint64 id = 1; string title = 2; string content = 3; string excerpt = 4; string cover_image = 5; uint64 category_id = 6; repeated string tag_names = 7; }
+message UpdateArticleReply { ArticleInfo article = 1; }
+message DeleteArticleRequest { uint64 id = 1; }
+message DeleteArticleReply {}
+message GetArticleRequest { string identifier = 1; }
+message GetArticleReply { ArticleInfo article = 1; }
+message ListArticlesRequest { string status = 1; uint64 category_id = 2; repeated string tags = 3; uint64 author_id = 4; string sort_by = 5; string sort_order = 6; int32 page = 7; int32 page_size = 8; }
+message ListArticlesReply { repeated ArticleInfo articles = 1; int64 total = 2; int32 page = 3; int32 page_size = 4; }
+message PublishArticleRequest { uint64 id = 1; }
+message PublishArticleReply { ArticleInfo article = 1; }
+message ArchiveArticleRequest { uint64 id = 1; }
+message ArchiveArticleReply { ArticleInfo article = 1; }
+message SearchArticlesRequest { string keyword = 1; int32 page = 2; int32 page_size = 3; }
+message SearchArticlesReply { repeated ArticleInfo articles = 1; int64 total = 2; }
+message LikeArticleRequest { uint64 id = 1; }
+message LikeArticleReply {}
+message UnlikeArticleRequest { uint64 id = 1; }
+message UnlikeArticleReply {}
+
+message CreateCommentRequest { uint64 article_id = 1; uint64 parent_id = 2; string content = 3; }
+message CreateCommentReply { CommentInfo comment = 1; }
+message UpdateCommentRequest { uint64 id = 1; string content = 2; }
+message UpdateCommentReply { CommentInfo comment = 1; }
+message DeleteCommentRequest { uint64 id = 1; }
+message DeleteCommentReply {}
+message ListCommentsRequest { uint64 article_id = 1; int32 page = 2; int32 page_size = 3; }
+message ListCommentsReply { repeated CommentNode comments = 1; int64 total = 2; }
+message ApproveCommentRequest { uint64 id = 1; }
+message ApproveCommentReply {}
+message MarkCommentSpamRequest { uint64 id = 1; }
+message MarkCommentSpamReply {}
+
+message CreateTagRequest { string name = 1; }
+message CreateTagReply { TagInfo tag = 1; }
+message ListTagsRequest {}
+message ListTagsReply { repeated TagInfo tags = 1; }
+message DeleteTagRequest { uint64 id = 1; }
+message DeleteTagReply {}
+
+message CreateCategoryRequest { string name = 1; string slug = 2; string description = 3; uint64 parent_id = 4; int32 sort_order = 5; }
+message CreateCategoryReply { CategoryInfo category = 1; }
+message ListCategoriesRequest {}
+message ListCategoriesReply { repeated CategoryInfo categories = 1; }
+message UpdateCategoryRequest { uint64 id = 1; string name = 2; string slug = 3; string description = 4; uint64 parent_id = 5; int32 sort_order = 6; }
+message UpdateCategoryReply { CategoryInfo category = 1; }
+message DeleteCategoryRequest { uint64 id = 1; }
+message DeleteCategoryReply {}
+
+message UploadFileRequest { string filename = 1; string mime_type = 2; bytes content = 3; }
+message UploadFileReply { FileInfo file = 1; }
+message GetFileRequest { uint64 id = 1; }
+message GetFileReply { FileInfo file = 1; }
+message DeleteFileRequest { uint64 id = 1; }
+message DeleteFileReply {}
+message ListFilesRequest { int32 page = 1; int32 page_size = 2; }
+message ListFilesReply { repeated FileInfo files = 1; int64 total = 2; }
+message GetPresignedPutURLRequest { string filename = 1; string mime_type = 2; }
+message GetPresignedPutURLReply { string url = 1; string object_key = 2; }
+
+message GetSiteConfigRequest {}
+message GetSiteConfigReply { SiteConfig config = 1; }
+message UpdateSiteConfigRequest { SiteConfig config = 1; }
+message UpdateSiteConfigReply { SiteConfig config = 1; }
+message ListBackgroundsRequest {}
+message ListBackgroundsReply { repeated SiteBackground backgrounds = 1; }
+message UploadBackgroundRequest { string filename = 1; bytes content = 2; }
+message UploadBackgroundReply { SiteBackground background = 1; }
+message DeleteBackgroundRequest { uint64 id = 1; }
+message DeleteBackgroundReply {}
+message SetActiveBackgroundRequest { uint64 id = 1; }
+message SetActiveBackgroundReply {}
+message GetMusicPlaylistRequest {}
+message GetMusicPlaylistReply { MusicPlaylist playlist = 1; }
+message UpdateMusicPlaylistRequest { MusicPlaylist playlist = 1; }
+message UpdateMusicPlaylistReply { MusicPlaylist playlist = 1; }
+
+message ArticleInfo {
+  uint64 id = 1;
+  string title = 2;
+  string slug = 3;
+  string content = 4;
+  string excerpt = 5;
+  string cover_image = 6;
+  string status = 7;
+  uint64 author_id = 8;
+  api.common.v1.AuthorInfo author = 9;
+  uint64 category_id = 10;
+  CategoryInfo category = 11;
+  repeated TagInfo tags = 12;
+  int64 view_count = 13;
+  int64 like_count = 14;
+  int64 comment_count = 15;
+  bool is_top = 16;
+  bool is_liked = 17;
+  string published_at = 18;
+  string created_at = 19;
+  string updated_at = 20;
+}
+
+message CommentInfo {
+  uint64 id = 1;
+  uint64 article_id = 2;
+  uint64 author_id = 3;
+  string author_name = 4;
+  string author_avatar = 5;
+  uint64 parent_id = 6;
+  int32 depth = 7;
+  string content = 8;
+  string status = 9;
+  string created_at = 10;
+  string updated_at = 11;
+}
+
+message CommentNode { CommentInfo comment = 1; repeated CommentNode children = 2; }
+
+message TagInfo { uint64 id = 1; string name = 2; string slug = 3; int64 article_count = 4; }
+
+message CategoryInfo {
+  uint64 id = 1;
+  string name = 2;
+  string slug = 3;
+  string description = 4;
+  uint64 parent_id = 5;
+  int32 sort_order = 6;
+  int64 article_count = 7;
+  repeated CategoryInfo children = 8;
+}
+
+message FileInfo { uint64 id = 1; string filename = 2; string mime_type = 3; int64 size = 4; string url = 5; string created_at = 6; }
+
+message SiteConfig {
+  string site_title = 1; string site_subtitle = 2; string site_description = 3;
+  string site_logo = 4; string site_favicon = 5;
+  string seo_keywords = 6; string seo_description = 7;
+  string social_github = 8; string social_twitter = 9; string social_email = 10;
+  string footer_text = 11; string icp_number = 12;
+  bool enable_comments = 13; bool enable_likes = 14; bool auto_approve_comments = 15;
+}
+
+message SiteBackground { uint64 id = 1; string filename = 2; string url = 3; bool is_active = 4; int32 sort_order = 5; string created_at = 6; }
+
+message MusicTrack { string title = 1; string artist = 2; string url = 3; string cover_url = 4; }
+
+message MusicPlaylist { repeated MusicTrack tracks = 1; }

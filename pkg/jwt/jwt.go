@@ -101,15 +101,17 @@ type Claims struct {
 
 // jwtPaser 组件
 type jwtPaser struct {
-	config *Config
+	config    *Config
+	blackList BlackListCache // JWT 黑名单缓存（用于注销后即时失效）
 }
 
 // NewJWT 创建 jwtPaser 实例
-func NewJWT(config *Config) JWT {
-	//b := NewBlackList(config.Cache)
+// config: JWT 签名配置
+// bl: 黑名单缓存接口（可为 nil，nil 表示禁用黑名单）
+func NewJWT(config *Config, bl BlackListCache) JWT {
 	return &jwtPaser{
-		config: config,
-		//blackList: b,
+		config:    config,
+		blackList: bl,
 	}
 }
 
@@ -228,19 +230,23 @@ func (j *jwtPaser) Server() middleware.Middleware {
 						// 使用 ParseAccessToken 校验 Token 类型
 						claims, err := j.ParseAccessToken(tokenString)
 						if err == nil {
-							// 同时设置到 context value 和 meta 包中
-							ctx = context.WithValue(ctx, "user_id", claims.UserId)
-							ctx = context.WithValue(ctx, "user_name", claims.UserName)
+							// 检查黑名单：已注销的 token 拒绝访问
+							if j.blackList != nil && j.blackList.IsEnabled() && j.blackList.IsTokenBlackListed(tokenString) {
+								// 黑名单命中，不注入用户信息，后续 handler 按未认证处理
+							} else {
+								// Token 有效且未被拉黑，注入用户信息到 context
+								ctx = context.WithValue(ctx, "user_id", claims.UserId)
+								ctx = context.WithValue(ctx, "user_name", claims.UserName)
 
-							// 与 pkg/meta 集成
-							reqMeta := &meta.RequestMetaData{
-								//JwtToken: tokenString,
-								Auth: meta.Auth{
-									UserID:   claims.UserId,
-									UserName: claims.UserName,
-								},
+								// 与 pkg/meta 集成
+								reqMeta := &meta.RequestMetaData{
+									Auth: meta.Auth{
+										UserID:   claims.UserId,
+										UserName: claims.UserName,
+									},
+								}
+								ctx = meta.NewClientCtx(ctx, reqMeta)
 							}
-							ctx = meta.NewClientCtx(ctx, reqMeta)
 						}
 					}
 				}

@@ -3,6 +3,7 @@ package infra
 import (
 	"context"
 	"strconv"
+	"time"
 
 	"ley/pkg/log"
 
@@ -65,6 +66,21 @@ func NewDB(
 	if err != nil {
 		panic(err)
 	}
+
+	// 配置数据库连接池参数（生产级）
+	sqlDB, err := masterDB.DB()
+	if err != nil {
+		panic(err)
+	}
+	// 最大打开连接数：根据 PostgreSQL 规格和预期并发量设定
+	sqlDB.SetMaxOpenConns(50)
+	// 最大空闲连接数：保持一定数量的预热连接，减少连接建立开销
+	sqlDB.SetMaxIdleConns(10)
+	// 连接最大存活时间：超时后自动重建，防止长连接被中间网络设备断开
+	sqlDB.SetConnMaxLifetime(1 * time.Hour)
+	// 空闲连接最大存活时间：超时后关闭，释放数据库服务端资源
+	sqlDB.SetConnMaxIdleTime(30 * time.Minute)
+
 	return masterDB
 }
 

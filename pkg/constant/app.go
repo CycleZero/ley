@@ -7,6 +7,7 @@ const (
 	ServiceNameComment    = "comment"
 	ServiceNameUser       = "user"
 	ServiceNamePost       = "post"
+	ServiceNameFile       = "file"
 	ServiceNameGreeter    = "greeter"
 	ServiceNameAttachment = "attachment"
 )

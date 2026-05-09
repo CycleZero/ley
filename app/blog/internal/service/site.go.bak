@@ -1,0 +1,140 @@
+package service
+
+import (
+	"context"
+
+	blogv1 "ley/api/blog/v1"
+	"ley/app/blog/internal/biz"
+
+	"github.com/go-kratos/kratos/v2/log"
+)
+
+type SiteService struct {
+	blogv1.UnimplementedSiteServiceServer
+	uc  *biz.SiteUseCase
+	log *log.Helper
+}
+
+func NewSiteService(uc *biz.SiteUseCase, logger log.Logger) *SiteService {
+	return &SiteService{uc: uc, log: log.NewHelper(logger)}
+}
+
+func (s *SiteService) GetSiteConfig(ctx context.Context, _ *blogv1.GetSiteConfigRequest) (*blogv1.GetSiteConfigReply, error) {
+	c, err := s.uc.GetConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &blogv1.GetSiteConfigReply{Config: toSiteConfig(c)}, nil
+}
+
+func (s *SiteService) UpdateSiteConfig(ctx context.Context, req *blogv1.UpdateSiteConfigRequest) (*blogv1.UpdateSiteConfigReply, error) {
+	c, err := s.uc.UpdateConfig(ctx, fromSiteConfig(req.Config))
+	if err != nil {
+		return nil, err
+	}
+	return &blogv1.UpdateSiteConfigReply{Config: toSiteConfig(c)}, nil
+}
+
+func (s *SiteService) ListBackgrounds(ctx context.Context, _ *blogv1.ListBackgroundsRequest) (*blogv1.ListBackgroundsReply, error) {
+	bgs, err := s.uc.ListBackgrounds(ctx)
+	if err != nil {
+		return nil, err
+	}
+	infos := make([]*blogv1.SiteBackground, 0, len(bgs))
+	for _, b := range bgs {
+		infos = append(infos, toSiteBackground(b))
+	}
+	return &blogv1.ListBackgroundsReply{Backgrounds: infos}, nil
+}
+
+func (s *SiteService) UploadBackground(ctx context.Context, req *blogv1.UploadBackgroundRequest) (*blogv1.UploadBackgroundReply, error) {
+	bg, err := s.uc.AddBackground(ctx, req.Filename, req.Content)
+	if err != nil {
+		return nil, err
+	}
+	return &blogv1.UploadBackgroundReply{Background: toSiteBackground(bg)}, nil
+}
+
+func (s *SiteService) DeleteBackground(ctx context.Context, req *blogv1.DeleteBackgroundRequest) (*blogv1.DeleteBackgroundReply, error) {
+	return &blogv1.DeleteBackgroundReply{}, s.uc.DeleteBackground(ctx, uint(req.Id))
+}
+
+func (s *SiteService) SetActiveBackground(ctx context.Context, req *blogv1.SetActiveBackgroundRequest) (*blogv1.SetActiveBackgroundReply, error) {
+	return &blogv1.SetActiveBackgroundReply{}, s.uc.SetActiveBackground(ctx, uint(req.Id))
+}
+
+func (s *SiteService) GetMusicPlaylist(ctx context.Context, _ *blogv1.GetMusicPlaylistRequest) (*blogv1.GetMusicPlaylistReply, error) {
+	p, err := s.uc.GetPlaylist(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &blogv1.GetMusicPlaylistReply{Playlist: toMusicPlaylist(p)}, nil
+}
+
+func (s *SiteService) UpdateMusicPlaylist(ctx context.Context, req *blogv1.UpdateMusicPlaylistRequest) (*blogv1.UpdateMusicPlaylistReply, error) {
+	p, err := s.uc.UpdatePlaylist(ctx, fromMusicPlaylist(req.Playlist))
+	if err != nil {
+		return nil, err
+	}
+	return &blogv1.UpdateMusicPlaylistReply{Playlist: toMusicPlaylist(p)}, nil
+}
+
+func toSiteConfig(c *biz.SiteSetting) *blogv1.SiteConfig {
+	if c == nil {
+		return nil
+	}
+	return &blogv1.SiteConfig{
+		SiteTitle: c.SiteTitle, SiteSubtitle: c.SiteSubtitle, SiteDescription: c.SiteDescription,
+		SiteLogo: c.SiteLogo, SiteFavicon: c.SiteFavicon,
+		SeoKeywords: c.SeoKeywords, SeoDescription: c.SeoDescription,
+		SocialGithub: c.SocialGithub, SocialTwitter: c.SocialTwitter, SocialEmail: c.SocialEmail,
+		FooterText: c.FooterText, IcpNumber: c.ICPNumber,
+		EnableComments: c.EnableComments, EnableLikes: c.EnableLikes, AutoApproveComments: c.AutoApproveComments,
+	}
+}
+
+func fromSiteConfig(c *blogv1.SiteConfig) *biz.SiteSetting {
+	if c == nil {
+		return nil
+	}
+	return &biz.SiteSetting{
+		SiteTitle: c.SiteTitle, SiteSubtitle: c.SiteSubtitle, SiteDescription: c.SiteDescription,
+		SiteLogo: c.SiteLogo, SiteFavicon: c.SiteFavicon,
+		SeoKeywords: c.SeoKeywords, SeoDescription: c.SeoDescription,
+		SocialGithub: c.SocialGithub, SocialTwitter: c.SocialTwitter, SocialEmail: c.SocialEmail,
+		FooterText: c.FooterText, ICPNumber: c.IcpNumber,
+		EnableComments: c.EnableComments, EnableLikes: c.EnableLikes, AutoApproveComments: c.AutoApproveComments,
+	}
+}
+
+func toSiteBackground(b *biz.SiteBackground) *blogv1.SiteBackground {
+	if b == nil {
+		return nil
+	}
+	return &blogv1.SiteBackground{
+		Id: uint64(b.ID), Filename: b.Filename, Url: b.URL, IsActive: b.IsActive,
+		SortOrder: int32(b.SortOrder), CreatedAt: b.CreatedAt.Format("2006-01-02T15:04:05Z"),
+	}
+}
+
+func toMusicPlaylist(p *biz.MusicPlaylist) *blogv1.MusicPlaylist {
+	if p == nil {
+		return nil
+	}
+	tracks := make([]*blogv1.MusicTrack, 0, len(p.Tracks))
+	for _, t := range p.Tracks {
+		tracks = append(tracks, &blogv1.MusicTrack{Title: t.Title, Artist: t.Artist, Url: t.URL, CoverUrl: t.CoverURL})
+	}
+	return &blogv1.MusicPlaylist{Tracks: tracks}
+}
+
+func fromMusicPlaylist(p *blogv1.MusicPlaylist) *biz.MusicPlaylist {
+	if p == nil {
+		return nil
+	}
+	tracks := make([]biz.MusicTrack, 0, len(p.Tracks))
+	for _, t := range p.Tracks {
+		tracks = append(tracks, biz.MusicTrack{Title: t.Title, Artist: t.Artist, URL: t.Url, CoverURL: t.CoverUrl})
+	}
+	return &biz.MusicPlaylist{Tracks: tracks}
+}

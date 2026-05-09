@@ -1,0 +1,138 @@
+syntax = "proto3";
+
+package api.auth.v1;
+
+option go_package = "ley/api/auth/v1;authv1";
+
+import "google/api/annotations.proto";
+import "openapi/v3/annotations.proto";
+import "api/common/v1/common.proto";
+
+option (openapi.v3.document) = {
+  info: {
+    title: "Ley Auth Service"
+    version: "1.0.0"
+    description: "用户认证服务 — 注册、登录、Token管理、用户资料"
+  }
+  tags: { name: "认证" description: "注册、登录、Token刷新、登出" }
+  tags: { name: "用户" description: "个人资料查询与更新" }
+};
+
+service AuthService {
+  rpc Register(RegisterRequest) returns (RegisterReply) {
+    option (google.api.http) = {
+      post: "/api/v1/auth/register"
+      body: "*"
+    };
+    option (openapi.v3.operation) = {
+      summary: "用户注册"
+      description: "创建新账号并返回Token，注册后自动登录"
+      tags: "认证"
+    };
+  }
+  rpc Login(LoginRequest) returns (LoginReply) {
+    option (google.api.http) = {
+      post: "/api/v1/auth/login"
+      body: "*"
+    };
+    option (openapi.v3.operation) = {
+      summary: "用户登录"
+      description: "通过用户名/邮箱+密码登录，返回Token对和用户信息"
+      tags: "认证"
+    };
+  }
+  rpc RefreshToken(RefreshTokenRequest) returns (RefreshTokenReply) {
+    option (google.api.http) = {
+      post: "/api/v1/auth/refresh"
+      body: "*"
+    };
+    option (openapi.v3.operation) = {
+      summary: "刷新令牌"
+      description: "使用有效的RefreshToken换取新的Token对（旧RefreshToken会被加入黑名单）"
+      tags: "认证"
+    };
+  }
+  rpc Logout(LogoutRequest) returns (LogoutReply) {
+    option (google.api.http) = {
+      post: "/api/v1/auth/logout"
+      body: "*"
+    };
+    option (openapi.v3.operation) = {
+      summary: "登出"
+      description: "将当前AccessToken和RefreshToken加入黑名单，登出后令牌不可再使用"
+      tags: "认证"
+    };
+  }
+  rpc GetProfile(GetProfileRequest) returns (GetProfileReply) {
+    option (google.api.http) = {
+      get: "/api/v1/users/me"
+    };
+    option (openapi.v3.operation) = {
+      summary: "获取当前用户资料"
+      description: "返回当前登录用户的完整信息（需要Bearer Token）"
+      tags: "用户"
+    };
+  }
+  rpc UpdateProfile(UpdateProfileRequest) returns (UpdateProfileReply) {
+    option (google.api.http) = {
+      put: "/api/v1/users/me"
+      body: "*"
+    };
+    option (openapi.v3.operation) = {
+      summary: "更新用户资料"
+      description: "更新当前用户的头像和个人简介"
+      tags: "用户"
+    };
+  }
+}
+
+message RegisterRequest {
+  string username = 1;
+  string email = 2;
+  string password = 3;
+}
+
+message RegisterReply {
+  api.common.v1.UserInfo user = 1;
+  api.common.v1.TokenPair token_pair = 2;
+}
+
+message LoginRequest {
+  string account = 1;
+  string password = 2;
+}
+
+message LoginReply {
+  api.common.v1.UserInfo user = 1;
+  api.common.v1.TokenPair token_pair = 2;
+}
+
+message RefreshTokenRequest {
+  string refresh_token = 1;
+}
+
+message RefreshTokenReply {
+  api.common.v1.UserInfo user = 1;
+  api.common.v1.TokenPair token_pair = 2;
+}
+
+message LogoutRequest {
+  string refresh_token = 1;
+}
+
+message LogoutReply {}
+
+message GetProfileRequest {}
+
+message GetProfileReply {
+  api.common.v1.UserInfo user = 1;
+}
+
+message UpdateProfileRequest {
+  string avatar = 1;
+  string bio = 2;
+}
+
+message UpdateProfileReply {
+  api.common.v1.UserInfo user = 1;
+}

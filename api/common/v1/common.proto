@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package api.common.v1;
+
+option go_package = "ley/api/common/v1;commonv1";
+
+message TokenPair {
+  string access_token = 1;
+  string refresh_token = 2;
+  int64 expires_in = 3;
+}
+
+message UserInfo {
+  uint64 id = 1;
+  string username = 2;
+  string email = 3;
+  string avatar = 4;
+  string bio = 5;
+  string role = 6;
+  string created_at = 7;
+  string updated_at = 8;
+}
+
+message AuthorInfo {
+  uint64 id = 1;
+  string username = 2;
+  string avatar = 3;
+}

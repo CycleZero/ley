@@ -103,13 +103,18 @@ func WithPollTimeout(d time.Duration) ConsumerOption {
 
 // 简单的内存队列实现，可用于测试或单进程场景
 type memoryConnection struct {
-	queues map[string]chan *Message
-	closed bool
+	queues     map[string]chan *Message
+	bufferSize int
+	closed     bool
 }
 
-func NewMemoryConnection() Connection {
+func NewMemoryConnection(bufferSize int) Connection {
+	if bufferSize <= 0 {
+		bufferSize = 1024
+	}
 	return &memoryConnection{
-		queues: make(map[string]chan *Message),
+		queues:     make(map[string]chan *Message),
+		bufferSize: bufferSize,
 	}
 }
 
@@ -145,7 +150,7 @@ func (c *memoryConnection) NewConsumer(ctx context.Context, topic string, opts .
 
 func (c *memoryConnection) ensureQueue(topic string) {
 	if _, ok := c.queues[topic]; !ok {
-		c.queues[topic] = make(chan *Message, 1000)
+		c.queues[topic] = make(chan *Message, c.bufferSize)
 	}
 }
 
@@ -224,22 +229,16 @@ func (c *memoryConsumer) Consume(ctx context.Context, handler func(context.Conte
 				return ErrConnectionClosed
 			}
 			if err := handler(ctx, msg); err != nil {
-				// 处理失败，根据配置决定是否 Nack
 				if !c.autoAck && msg.NackFunc != nil {
 					_ = msg.NackFunc(true)
 				}
-				// 继续处理下一条（或可返回错误终止消费）
 				continue
 			}
-			// 成功
 			if !c.autoAck && msg.AckFunc != nil {
 				_ = msg.AckFunc()
 			}
 		case <-ctx.Done():
 			return ctx.Err()
-		default:
-			// 非阻塞检查，防止忙等
-			time.Sleep(c.pollTimeout)
 		}
 	}
 }

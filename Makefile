@@ -127,4 +127,22 @@ help:
 	} \
 	{ lastLine = $$0 }' $(MAKEFILE_LIST)
 
+.PHONY: test
+test: test-unit test-integration
+
+.PHONY: test-unit
+# run unit tests
+test-unit:
+	go test -v -short -count=1 -coverprofile=coverage.out ./app/... ./pkg/...
+
+.PHONY: test-integration
+# run integration tests (requires docker infrastructure)
+test-integration:
+	go test -v -count=1 -tags=integration ./app/... ./pkg/...
+
+.PHONY: test-coverage
+# open coverage report in browser
+test-coverage:
+	go tool cover -html=coverage.out
+
 .DEFAULT_GOAL := help
