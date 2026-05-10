@@ -9,6 +9,7 @@ import (
 	"unicode"
 
 	"ley/pkg/eventbus"
+	"ley/pkg/meta"
 
 	kerrors "github.com/go-kratos/kratos/v2/errors"
 	"github.com/go-kratos/kratos/v2/log"
@@ -1179,13 +1180,14 @@ func normalizeCategoryID(categoryID *uint) *uint {
 	return categoryID
 }
 
-// getCurrentUserID 从 context 中提取当前登录用户 ID
+// getCurrentUserID 从 pkg/meta 获取当前登录用户 ID。
 //
-// Gateway JWT 中间件在请求入口处将 user_id 注入到 context.Value("user_id")。
-// 若 context 中无此值或值为 0 → 返回 ErrUserNotAuthenticated。
+// 用户认证信息由 Gateway JWT 中间件注入到 Kratos metadata（x-md-global- 全局透传）。
+// GetRequestMetaData 优先从服务端上下文解析，失败则回退到客户端上下文。
 func getCurrentUserID(ctx context.Context) (uint64, error) {
-	if userID, ok := ctx.Value("user_id").(uint64); ok && userID > 0 {
-		return userID, nil
+	reqMeta := meta.GetRequestMetaData(ctx)
+	if reqMeta != nil && reqMeta.Auth.UserID > 0 {
+		return reqMeta.Auth.UserID, nil
 	}
 	return 0, ErrUserNotAuthenticated
 }

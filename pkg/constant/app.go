@@ -10,6 +10,7 @@ const (
 	ServiceNameFile       = "file"
 	ServiceNameGreeter    = "greeter"
 	ServiceNameAttachment = "attachment"
+	ServiceNameBlog       = "blog"
 )
 
 const (

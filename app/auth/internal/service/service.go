@@ -7,6 +7,7 @@ import (
 	commonv1 "ley/api/common/v1"
 	"ley/app/auth/internal/biz"
 	"ley/pkg/jwt"
+	"ley/pkg/meta"
 
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/go-kratos/kratos/v2/transport"
@@ -113,8 +114,9 @@ func toTokenPair(pair *jwt.TokenPair) *commonv1.TokenPair {
 // =============================================================================
 
 func getUserID(ctx context.Context) uint {
-	if v, ok := ctx.Value("user_id").(uint64); ok {
-		return uint(v)
+	reqMeta := meta.GetRequestMetaData(ctx)
+	if reqMeta != nil && reqMeta.Auth.UserID > 0 {
+		return uint(reqMeta.Auth.UserID)
 	}
 	return 0
 }

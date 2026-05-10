@@ -1,0 +1,53 @@
+# ================================
+# Ley后端服务 Docker Compose 配置
+# ================================
+# 使用 host 网络模式
+# 注意: 端口通过各服务的配置文件指定，不在此处映射
+#
+# 使用方法:
+#   构建所有服务: docker-compose build
+#   启动所有服务: docker-compose up -d
+#   查看日志:     docker-compose logs -f user
+#   停止服务:     docker-compose down
+#
+# 配置文件路径:
+#   各服务配置文件位于 ./data/<service>/configs/ 目录
+#   端口在配置文件中指定
+# ================================
+
+services:
+  # ================================
+  # User 服务
+  # ================================
+  user:
+    build:
+      context: .
+      dockerfile: app/auth/Dockerfile
+      args:
+        GOPROXY: https://goproxy.cn,direct
+    image: ley-user:latest
+    container_name: ley-user
+    network_mode: host
+    volumes:
+      - ./data:/app/data
+    environment:
+      - TZ=Asia/Shanghai
+    restart: unless-stopped
+
+  # ================================
+  # Blog 服务
+  # ================================
+  blog:
+    build:
+      context: .
+      dockerfile: app/blog/Dockerfile
+      args:
+        GOPROXY: https://goproxy.cn,direct
+    image: ley-blog:latest
+    container_name: ley-blog
+    network_mode: host
+    volumes:
+      - ./data:/app/data
+    environment:
+      - TZ=Asia/Shanghai
+    restart: unless-stopped

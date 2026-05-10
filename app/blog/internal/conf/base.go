@@ -1,8 +1,13 @@
 package conf
 
+import "ley/pkg/constant"
+
+const ServiceDataDir = constant.DataDir + "/" + ServiceName
+
+const LocalConfigDir = ServiceDataDir + "/" + "configs"
+const ServiceName = constant.ServiceNameBlog
 const (
-	ServiceName      = "blog"
-	ServiceDataDir   = "./data/" + ServiceName
-	LocalConfigDir   = ServiceDataDir + "/configs"
-	RemoteConfigPath = "/ley/configs/" + ServiceName + "/config.yaml"
+	RemoteConfigPath = constant.RemoteConfigPathBase +
+		constant.RemoteConfigPathSep + ServiceName +
+		constant.RemoteConfigPathSep + "config.yaml"
 )
