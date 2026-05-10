@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package gateway.middleware.jwt.v1;
+
+option go_package = "github.com/go-kratos/gateway/api/gateway/middleware/jwt/v1;v1";
+
+import "google/protobuf/duration.proto";
+
+// JWT middleware configuration
+message JWT {
+    // Signing key for JWT token verification
+    // When etcd is configured, this field is ignored (fetched from etcd instead)
+    string signing_key = 1;
+    
+    // Token expiration time
+    google.protobuf.Duration expired_time = 2;
+    
+    // Token issuer
+    // When etcd is configured, this field is ignored (fetched from etcd instead)
+    string issuer = 3;
+    
+    // Whether to skip validation for certain paths
+    repeated string skip_paths = 4;
+    
+    // Whether the middleware is enabled
+    bool enabled = 5;
+    
+    // Whether authentication is required
+    // If true (default), reject request when authentication fails
+    // If false, allow request to pass even when authentication fails (no metadata)
+    optional bool required = 6;
+
+    // ========== etcd 动态密钥源（优先级高于 signing_key / issuer） ==========
+    
+    // etcd 端点列表，逗号分隔，如 "127.0.0.1:2379"
+    // 配置后，signing_key 和 issuer 从 etcd 读取，本地字段失效
+    string etcd_endpoints = 7;
+    
+    // etcd 配置路径，如 "vcyuan-backend-app/configs/shared/jwt"
+    // 该路径的值格式：{"signing_key": "xxx", "issuer": "xxx", "expired_hours": 24}
+    string etcd_key_path = 8;
+    
+    // etcd watch 超时，默认 5s
+    google.protobuf.Duration etcd_dial_timeout = 9;
+}

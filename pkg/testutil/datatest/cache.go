@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"ley/pkg/cache"
+	"github.com/CycleZero/ley/pkg/cache"
 )
 
 // CacheOp records a cache operation for assertion

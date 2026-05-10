@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"time"
 
-	"ley/app/blog/internal/biz"
-	"ley/pkg/util"
+	"github.com/CycleZero/ley/app/blog/internal/biz"
+	"github.com/CycleZero/ley/pkg/util"
 
 	"go.opentelemetry.io/otel/attribute"
 	"gorm.io/gorm"

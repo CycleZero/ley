@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 
-	"ley/app/blog/internal/biz"
-	"ley/pkg/oss"
+	"github.com/CycleZero/ley/app/blog/internal/biz"
+	"github.com/CycleZero/ley/pkg/oss"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"

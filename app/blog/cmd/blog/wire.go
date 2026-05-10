@@ -4,12 +4,12 @@
 package main
 
 import (
-	"ley/app/blog/internal/biz"
-	"ley/app/blog/internal/conf"
-	"ley/app/blog/internal/data"
-	"ley/app/blog/internal/server"
-	"ley/app/blog/internal/service"
-	commonconf "ley/conf"
+	"github.com/CycleZero/ley/app/blog/internal/biz"
+	"github.com/CycleZero/ley/app/blog/internal/conf"
+	"github.com/CycleZero/ley/app/blog/internal/data"
+	"github.com/CycleZero/ley/app/blog/internal/server"
+	"github.com/CycleZero/ley/app/blog/internal/service"
+	commonconf "github.com/CycleZero/ley/conf"
 
 	"github.com/go-kratos/kratos/v2"
 	"github.com/go-kratos/kratos/v2/log"

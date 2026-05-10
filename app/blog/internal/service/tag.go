@@ -3,8 +3,8 @@ package service
 import (
 	"context"
 
-	blogv1 "ley/api/blog/v1"
-	"ley/app/blog/internal/biz"
+	blogv1 "github.com/CycleZero/ley/api/blog/v1"
+	"github.com/CycleZero/ley/app/blog/internal/biz"
 
 	"github.com/go-kratos/kratos/v2/log"
 )

@@ -4,12 +4,12 @@ import (
 	"flag"
 	"fmt"
 
-	"ley/app/auth/internal/conf"
-	commonconf "ley/conf"
-	"ley/pkg/infra"
-	locallog "ley/pkg/log"
-	"ley/pkg/trace"
-	"ley/pkg/util"
+	"github.com/CycleZero/ley/app/auth/internal/conf"
+	commonconf "github.com/CycleZero/ley/conf"
+	"github.com/CycleZero/ley/pkg/infra"
+	locallog "github.com/CycleZero/ley/pkg/log"
+	"github.com/CycleZero/ley/pkg/trace"
+	"github.com/CycleZero/ley/pkg/util"
 
 	"github.com/go-kratos/kratos/contrib/config/etcd/v2"
 	"github.com/go-kratos/kratos/v2"

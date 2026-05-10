@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package api.auth.v1;
 
-option go_package = "ley/api/auth/v1;authv1";
+option go_package = "github.com/CycleZero/ley/api/auth/v1;authv1";
 
 enum AuthErrorReason {
   AUTH_ERROR_UNSPECIFIED = 0;

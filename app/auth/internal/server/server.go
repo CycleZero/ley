@@ -1,7 +1,7 @@
 package server
 
 import (
-	"ley/pkg/util"
+	"github.com/CycleZero/ley/pkg/util"
 
 	"github.com/google/wire"
 )

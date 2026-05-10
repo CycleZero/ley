@@ -5,7 +5,7 @@ FROM ley-builder:v1 AS builder
 
 # 设置 Go 代理和构建参数
 ARG GOPROXY=https://goproxy.cn,direct
-ARG SERVICE_NAME=user
+ARG SERVICE_NAME=auth
 
 
 

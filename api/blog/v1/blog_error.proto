@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package api.blog.v1;
 
-option go_package = "ley/api/blog/v1;blogv1";
+option go_package = "github.com/CycleZero/ley/api/blog/v1;blogv1";
 
 enum BlogErrorReason {
   BLOG_ERROR_UNSPECIFIED = 0;

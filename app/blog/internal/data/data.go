@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	"ley/app/blog/internal/biz"
-	"ley/app/blog/internal/conf"
-	"ley/pkg/cache"
-	"ley/pkg/infra"
-	"ley/pkg/oss"
+	"github.com/CycleZero/ley/app/blog/internal/biz"
+	"github.com/CycleZero/ley/app/blog/internal/conf"
+	"github.com/CycleZero/ley/pkg/cache"
+	"github.com/CycleZero/ley/pkg/infra"
+	"github.com/CycleZero/ley/pkg/oss"
 
 	etcdreg "github.com/go-kratos/kratos/contrib/registry/etcd/v2"
 	"github.com/go-kratos/kratos/v2/log"

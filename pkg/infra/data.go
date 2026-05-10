@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"ley/pkg/log"
+	"github.com/CycleZero/ley/pkg/log"
 
 	"github.com/minio/minio-go/v7"
 	"go.mongodb.org/mongo-driver/v2/mongo"

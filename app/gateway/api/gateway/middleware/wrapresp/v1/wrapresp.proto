@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package gateway.middleware.wrapresp.v1;
+
+option go_package = "github.com/go-kratos/gateway/api/gateway/middleware/wrapresp/v1";
+
+// WrapResp 响应包装中间件配置
+message WrapResp {
+    // 成功状态码，默认为 0
+    optional int32 success_code = 1;
+    // 错误状态码（响应状态码 >= 400 时使用），默认使用 HTTP 状态码
+    optional int32 error_code = 2;
+    // 成功消息，默认为 "success"
+    optional string success_msg = 3;
+    // 从原始响应体中提取错误消息的字段名，默认使用 HTTP 状态文本
+    optional string error_msg_field = 4;
+    // 是否包装错误响应（状态码 >= 400），默认为 true
+    optional bool wrap_error = 5;
+    // 是否包装成功响应（状态码 < 400），默认为 true
+    optional bool wrap_success = 6;
+}

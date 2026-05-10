@@ -1,4 +1,4 @@
-module ley
+module github.com/CycleZero/ley
 
 go 1.25.0
 

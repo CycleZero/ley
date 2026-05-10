@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"ley/pkg/mq"
+	"github.com/CycleZero/ley/pkg/mq"
 
 	klog "github.com/go-kratos/kratos/v2/log"
 )

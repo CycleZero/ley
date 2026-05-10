@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package auth.conf;
 
-option go_package = "ley/app/auth/internal/conf;conf";
+option go_package = "github.com/CycleZero/ley/app/auth/internal/conf;conf";
 
 import "google/protobuf/duration.proto";
 

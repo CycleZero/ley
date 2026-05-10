@@ -6,12 +6,12 @@
 package main
 
 import (
-	"ley/app/auth/internal/biz"
-	"ley/app/auth/internal/conf"
-	"ley/app/auth/internal/data"
-	"ley/app/auth/internal/server"
-	"ley/app/auth/internal/service"
-	commonconf "ley/conf"
+	"github.com/CycleZero/ley/app/auth/internal/biz"
+	"github.com/CycleZero/ley/app/auth/internal/conf"
+	"github.com/CycleZero/ley/app/auth/internal/data"
+	"github.com/CycleZero/ley/app/auth/internal/server"
+	"github.com/CycleZero/ley/app/auth/internal/service"
+	commonconf "github.com/CycleZero/ley/conf"
 
 	"github.com/go-kratos/kratos/v2"
 	"github.com/go-kratos/kratos/v2/log"

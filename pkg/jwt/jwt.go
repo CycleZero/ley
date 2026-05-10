@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"ley/pkg/cache"
-	"ley/pkg/meta"
+	"github.com/CycleZero/ley/pkg/cache"
+	"github.com/CycleZero/ley/pkg/meta"
 
 	"github.com/go-kratos/kratos/v2/middleware"
 	"github.com/go-kratos/kratos/v2/transport"

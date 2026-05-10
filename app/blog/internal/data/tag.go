@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"ley/app/blog/internal/biz"
-	"ley/pkg/util"
+	"github.com/CycleZero/ley/app/blog/internal/biz"
+	"github.com/CycleZero/ley/pkg/util"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"

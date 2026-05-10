@@ -3,10 +3,10 @@ package data
 import (
 	"context"
 
-	"ley/app/auth/internal/biz"
-	"ley/app/auth/internal/conf"
-	"ley/pkg/cache"
-	"ley/pkg/infra"
+	"github.com/CycleZero/ley/app/auth/internal/biz"
+	"github.com/CycleZero/ley/app/auth/internal/conf"
+	"github.com/CycleZero/ley/pkg/cache"
+	"github.com/CycleZero/ley/pkg/infra"
 
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/google/wire"

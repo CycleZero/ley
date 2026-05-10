@@ -13,7 +13,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"ley/pkg/mq"
+	"github.com/CycleZero/ley/pkg/mq"
 )
 
 // =============================================================================

@@ -1,6 +1,6 @@
 package infra
 
-import "ley/pkg/task"
+import "github.com/CycleZero/ley/pkg/task"
 
 var globalTaskQueue *task.TaskQueue
 

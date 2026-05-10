@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"ley/app/auth/internal/biz"
-	"ley/pkg/cache"
-	"ley/pkg/util"
+	"github.com/CycleZero/ley/app/auth/internal/biz"
+	"github.com/CycleZero/ley/pkg/cache"
+	"github.com/CycleZero/ley/pkg/util"
 
 	"go.opentelemetry.io/otel/attribute"
 	"gorm.io/gorm"

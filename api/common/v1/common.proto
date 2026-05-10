@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package api.common.v1;
 
-option go_package = "ley/api/common/v1;commonv1";
+option go_package = "github.com/CycleZero/ley/api/common/v1;commonv1";
 
 message TokenPair {
   string access_token = 1;

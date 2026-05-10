@@ -8,8 +8,8 @@ import (
 	"time"
 	"unicode"
 
-	"ley/pkg/eventbus"
-	"ley/pkg/meta"
+	"github.com/CycleZero/ley/pkg/eventbus"
+	"github.com/CycleZero/ley/pkg/meta"
 
 	kerrors "github.com/go-kratos/kratos/v2/errors"
 	"github.com/go-kratos/kratos/v2/log"

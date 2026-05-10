@@ -3,21 +3,16 @@ GOPATH:=$(shell go env GOPATH)
 VERSION=$(shell git describe --tags --always)
 
 ifeq ($(GOHOSTOS), windows)
-	#the `find.exe` is different from `find` in bash/shell.
-	#to see https://docs.microsoft.com/en-us/windows-server/administration/windows-commands/find.
-	#changed to use git-bash.exe to run find cli or other cli friendly, caused of every developer has a Git.
-	#Git_Bash= $(subst cmd\,bin\bash.exe,$(dir $(shell where git)))
-#	Git_Bash=$(subst \,/,$(subst cmd\,bin\bash.exe,$(dir $(shell where git))))
 	Git_Bash="/c/Program Files/Git/bin/bash.exe"
-	INTERNAL_PROTO_FILES=$(shell $(Git_Bash) -c "cd `pwd` && find app -name *.proto")
+	INTERNAL_PROTO_FILES=$(shell $(Git_Bash) -c "cd `pwd` && find app -name *.proto -not -path '*/gateway/*'")
 	CONFIG_PROTO_FILES=$(shell $(Git_Bash) -c "cd `pwd` && find conf -name *.proto")
 	API_PROTO_FILES=$(shell $(Git_Bash) -c "cd `pwd` && find api -name *.proto")
-	INTERNAL_CONFIG_PROTO_FILES=$(shell $(Git_Bash) -c "cd `pwd` && find app -path '*/internal/conf/*.proto'")
+	INTERNAL_CONFIG_PROTO_FILES=$(shell $(Git_Bash) -c "cd `pwd` && find app -path '*/internal/conf/*.proto' -not -path '*/gateway/*'")
 else
-	INTERNAL_PROTO_FILES=$(shell find app -name *.proto)
+	INTERNAL_PROTO_FILES=$(shell find app -name *.proto -not -path '*/gateway/*')
 	API_PROTO_FILES=$(shell find api -name *.proto)
 	CONFIG_PROTO_FILES=$(shell find conf -name *.proto)
-	INTERNAL_CONFIG_PROTO_FILES=$(shell find app -path '*/internal/conf/*.proto')
+	INTERNAL_CONFIG_PROTO_FILES=$(shell find app -path '*/internal/conf/*.proto' -not -path '*/gateway/*')
 endif
 
 
@@ -84,10 +79,28 @@ api:
 	       $(API_PROTO_FILES)
 
 .PHONY: build
-# build
-#mkdir -p bin/ && go build -ldflags "-X main.Version=$(VERSION)" -o ./bin/ ./...
+# build auth + blog services
 build:
-	mkdir -p bin/ && go build -o ./bin/ ./...
+	mkdir -p bin/ && go build -o ./bin/auth ./app/auth/cmd/auth && go build -o ./bin/blog ./app/blog/cmd/blog
+
+.PHONY: build-auth
+# build auth service only
+build-auth:
+	mkdir -p bin/ && go build -o ./bin/auth ./app/auth/cmd/auth
+
+.PHONY: build-blog
+# build blog service only
+build-blog:
+	mkdir -p bin/ && go build -o ./bin/blog ./app/blog/cmd/blog
+
+.PHONY: build-gateway
+# build gateway service (separate module)
+build-gateway:
+	cd app/gateway && go build -o ../../bin/gateway ./cmd/gateway
+
+.PHONY: build-all
+# build all services including gateway
+build-all: build build-gateway
 .PHONY: generate
 # generate
 generate:
@@ -103,7 +116,10 @@ all:
 
 
 wire:
-	wire gen $(shell find ./app -name wire.go -not -path "*/test/*" | xargs -n1 dirname | sort -u)
+	wire gen $(shell find ./app -name wire.go -not -path "*/test/*" -not -path "*/gateway/*" | xargs -n1 dirname | sort -u)
+
+wire-all: wire
+	cd app/gateway && wire gen ./cmd/gateway 2>/dev/null || true
 
 rebuild: api config internal_proto wire build
 
@@ -144,5 +160,20 @@ test-integration:
 # open coverage report in browser
 test-coverage:
 	go tool cover -html=coverage.out
+
+.PHONY: docker-build
+# build all docker images
+docker-build:
+	docker-compose build
+
+.PHONY: docker-up
+# start all services via docker-compose
+docker-up:
+	docker-compose up -d
+
+.PHONY: docker-down
+# stop all services
+docker-down:
+	docker-compose down
 
 .DEFAULT_GOAL := help

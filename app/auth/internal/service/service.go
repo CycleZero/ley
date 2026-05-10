@@ -3,11 +3,11 @@ package service
 import (
 	"context"
 
-	authv1 "ley/api/auth/v1"
-	commonv1 "ley/api/common/v1"
-	"ley/app/auth/internal/biz"
-	"ley/pkg/jwt"
-	"ley/pkg/meta"
+	authv1 "github.com/CycleZero/ley/api/auth/v1"
+	commonv1 "github.com/CycleZero/ley/api/common/v1"
+	"github.com/CycleZero/ley/app/auth/internal/biz"
+	"github.com/CycleZero/ley/pkg/jwt"
+	"github.com/CycleZero/ley/pkg/meta"
 
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/go-kratos/kratos/v2/transport"

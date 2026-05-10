@@ -1,9 +1,9 @@
 package biz
 
 import (
-	"ley/app/blog/internal/conf"
-	"ley/pkg/eventbus"
-	"ley/pkg/mq"
+	"github.com/CycleZero/ley/app/blog/internal/conf"
+	"github.com/CycleZero/ley/pkg/eventbus"
+	"github.com/CycleZero/ley/pkg/mq"
 
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/google/wire"

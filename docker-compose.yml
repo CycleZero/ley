@@ -1,32 +1,47 @@
 # ================================
-# Ley后端服务 Docker Compose 配置
+# Ley 博客平台 Docker Compose 配置
 # ================================
 # 使用 host 网络模式
-# 注意: 端口通过各服务的配置文件指定，不在此处映射
 #
 # 使用方法:
-#   构建所有服务: docker-compose build
-#   启动所有服务: docker-compose up -d
-#   查看日志:     docker-compose logs -f user
-#   停止服务:     docker-compose down
-#
-# 配置文件路径:
-#   各服务配置文件位于 ./data/<service>/configs/ 目录
-#   端口在配置文件中指定
+#   docker-compose build          # 构建所有服务
+#   docker-compose up -d           # 启动所有服务
+#   docker-compose logs -f auth    # 查看 auth 服务日志
+#   docker-compose down            # 停止所有服务
 # ================================
 
 services:
   # ================================
-  # User 服务
+  # Gateway — API 网关 :8000
   # ================================
-  user:
+  gateway:
+    build:
+      context: .
+      dockerfile: app/gateway/Dockerfile
+    image: ley-gateway:latest
+    container_name: ley-gateway
+    network_mode: host
+    volumes:
+      - ./data:/app/data
+    environment:
+      - TZ=Asia/Shanghai
+    restart: unless-stopped
+    depends_on:
+      - auth
+      - blog
+
+  # ================================
+  # Auth 服务 — :9001 (gRPC) / :8001 (HTTP)
+  # ================================
+  auth:
     build:
       context: .
       dockerfile: app/auth/Dockerfile
       args:
         GOPROXY: https://goproxy.cn,direct
-    image: ley-user:latest
-    container_name: ley-user
+        SERVICE_NAME: auth
+    image: ley-auth:latest
+    container_name: ley-auth
     network_mode: host
     volumes:
       - ./data:/app/data
@@ -35,7 +50,7 @@ services:
     restart: unless-stopped
 
   # ================================
-  # Blog 服务
+  # Blog 服务 — :9002 (gRPC) / :8002 (HTTP)
   # ================================
   blog:
     build:
@@ -43,6 +58,7 @@ services:
       dockerfile: app/blog/Dockerfile
       args:
         GOPROXY: https://goproxy.cn,direct
+        SERVICE_NAME: blog
     image: ley-blog:latest
     container_name: ley-blog
     network_mode: host

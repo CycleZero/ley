@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"ley/pkg/eventbus"
-	"ley/pkg/jwt"
-	"ley/pkg/security"
+	"github.com/CycleZero/ley/pkg/eventbus"
+	"github.com/CycleZero/ley/pkg/jwt"
+	"github.com/CycleZero/ley/pkg/security"
 
 	kerrors "github.com/go-kratos/kratos/v2/errors"
 	"github.com/go-kratos/kratos/v2/log"

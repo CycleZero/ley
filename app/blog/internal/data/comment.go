@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"ley/app/blog/internal/biz"
+	"github.com/CycleZero/ley/app/blog/internal/biz"
 
 	"go.opentelemetry.io/otel/attribute"
 	"gorm.io/gorm"

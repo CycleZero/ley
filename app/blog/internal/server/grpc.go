@@ -3,10 +3,10 @@ package server
 import (
 	"strings"
 
-	blogv1 "ley/api/blog/v1"
-	"ley/app/blog/internal/service"
-	leyconf "ley/conf"
-	pkgmw "ley/pkg/middleware"
+	blogv1 "github.com/CycleZero/ley/api/blog/v1"
+	"github.com/CycleZero/ley/app/blog/internal/service"
+	leyconf "github.com/CycleZero/ley/conf"
+	pkgmw "github.com/CycleZero/ley/pkg/middleware"
 
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/go-kratos/kratos/v2/transport/grpc"

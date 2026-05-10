@@ -3,10 +3,10 @@ package server
 import (
 	"strings"
 
-	authv1 "ley/api/auth/v1"
-	"ley/app/auth/internal/service"
-	leyconf "ley/conf"
-	pkgmw "ley/pkg/middleware"
+	authv1 "github.com/CycleZero/ley/api/auth/v1"
+	"github.com/CycleZero/ley/app/auth/internal/service"
+	leyconf "github.com/CycleZero/ley/conf"
+	pkgmw "github.com/CycleZero/ley/pkg/middleware"
 
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/go-kratos/kratos/v2/transport/grpc"

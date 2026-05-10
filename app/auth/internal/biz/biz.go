@@ -1,11 +1,11 @@
 package biz
 
 import (
-	"ley/app/auth/internal/conf"
-	"ley/pkg/cache"
-	"ley/pkg/eventbus"
-	"ley/pkg/jwt"
-	"ley/pkg/mq"
+	"github.com/CycleZero/ley/app/auth/internal/conf"
+	"github.com/CycleZero/ley/pkg/cache"
+	"github.com/CycleZero/ley/pkg/eventbus"
+	"github.com/CycleZero/ley/pkg/jwt"
+	"github.com/CycleZero/ley/pkg/mq"
 
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/google/wire"

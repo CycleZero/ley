@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"testing"
 
-	"ley/pkg/cache"
+	"github.com/CycleZero/ley/pkg/cache"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"

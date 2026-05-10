@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package blog.conf;
 
-option go_package = "ley/app/blog/internal/conf;conf";
+option go_package = "github.com/CycleZero/ley/app/blog/internal/conf;conf";
 
 import "google/protobuf/duration.proto";
 import "conf/types.proto";

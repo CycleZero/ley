@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"ley/pkg/log"
+	"github.com/CycleZero/ley/pkg/log"
 
 	"github.com/redis/go-redis/v9"
 )

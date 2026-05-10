@@ -13,7 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"ley/pkg/mq"
+	"github.com/CycleZero/ley/pkg/mq"
 
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/google/uuid"
