@@ -9,10 +9,9 @@ import (
 
 	"github.com/CycleZero/ley/pkg/cache"
 	"github.com/CycleZero/ley/pkg/meta"
-
 	"github.com/go-kratos/kratos/v2/middleware"
 	"github.com/go-kratos/kratos/v2/transport"
-	jwtlib "github.com/golang-jwt/jwt/v5"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 const (
@@ -96,22 +95,20 @@ type Payload struct {
 type Claims struct {
 	TokenType string
 	Payload
-	jwtlib.RegisteredClaims
+	jwt.RegisteredClaims
 }
 
 // jwtPaser 组件
 type jwtPaser struct {
-	config    *Config
-	blackList BlackListCache // JWT 黑名单缓存（用于注销后即时失效）
+	config *Config
 }
 
 // NewJWT 创建 jwtPaser 实例
-// config: JWT 签名配置
-// bl: 黑名单缓存接口（可为 nil，nil 表示禁用黑名单）
-func NewJWT(config *Config, bl BlackListCache) JWT {
+func NewJWT(config *Config) JWT {
+	//b := NewBlackList(config.Cache)
 	return &jwtPaser{
-		config:    config,
-		blackList: bl,
+		config: config,
+		//blackList: b,
 	}
 }
 
@@ -123,14 +120,14 @@ func (j *jwtPaser) GenerateToken(payload Payload) (string, error) {
 	claims := Claims{
 		TokenType: TokenTypeAccess,
 		Payload:   payload,
-		RegisteredClaims: jwtlib.RegisteredClaims{
-			ExpiresAt: jwtlib.NewNumericDate(expireTime),
-			IssuedAt:  jwtlib.NewNumericDate(nowTime),
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(expireTime),
+			IssuedAt:  jwt.NewNumericDate(nowTime),
 			Issuer:    j.config.Issuer,
 		},
 	}
 
-	token := jwtlib.NewWithClaims(jwtlib.SigningMethodHS256, claims)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(j.config.SigningKey))
 }
 
@@ -151,14 +148,14 @@ func (j *jwtPaser) GenerateTokenPair(payload Payload) (*TokenPair, error) {
 	refreshClaims := Claims{
 		TokenType: TokenTypeRefresh,
 		Payload:   payload,
-		RegisteredClaims: jwtlib.RegisteredClaims{
-			ExpiresAt: jwtlib.NewNumericDate(refreshExpireTime),
-			IssuedAt:  jwtlib.NewNumericDate(nowTime),
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(refreshExpireTime),
+			IssuedAt:  jwt.NewNumericDate(nowTime),
 			Issuer:    j.config.Issuer,
 		},
 	}
 
-	refreshToken := jwtlib.NewWithClaims(jwtlib.SigningMethodHS256, refreshClaims)
+	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims)
 	refreshTokenString, err := refreshToken.SignedString([]byte(j.config.SigningKey))
 	if err != nil {
 		return nil, err
@@ -172,7 +169,7 @@ func (j *jwtPaser) GenerateTokenPair(payload Payload) (*TokenPair, error) {
 
 // ParseToken 解析 Token（不校验类型）
 func (j *jwtPaser) ParseToken(tokenString string) (*Claims, error) {
-	token, err := jwtlib.ParseWithClaims(tokenString, &Claims{}, func(token *jwtlib.Token) (interface{}, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		return []byte(j.config.SigningKey), nil
 	})
 
@@ -230,23 +227,19 @@ func (j *jwtPaser) Server() middleware.Middleware {
 						// 使用 ParseAccessToken 校验 Token 类型
 						claims, err := j.ParseAccessToken(tokenString)
 						if err == nil {
-							// 检查黑名单：已注销的 token 拒绝访问
-							if j.blackList != nil && j.blackList.IsEnabled() && j.blackList.IsTokenBlackListed(tokenString) {
-								// 黑名单命中，不注入用户信息，后续 handler 按未认证处理
-							} else {
-								// Token 有效且未被拉黑，注入用户信息到 context
-								ctx = context.WithValue(ctx, "user_id", claims.UserId)
-								ctx = context.WithValue(ctx, "user_name", claims.UserName)
+							// 同时设置到 context value 和 meta 包中
+							ctx = context.WithValue(ctx, "user_id", claims.UserId)
+							ctx = context.WithValue(ctx, "user_name", claims.UserName)
 
-								// 与 pkg/meta 集成
-								reqMeta := &meta.RequestMetaData{
-									Auth: meta.Auth{
-										UserID:   claims.UserId,
-										UserName: claims.UserName,
-									},
-								}
-								ctx = meta.NewClientCtx(ctx, reqMeta)
+							// 与 pkg/meta 集成
+							reqMeta := &meta.RequestMetaData{
+								//JwtToken: tokenString,
+								Auth: meta.Auth{
+									UserID:   claims.UserId,
+									UserName: claims.UserName,
+								},
 							}
+							ctx = meta.NewClientCtx(ctx, reqMeta)
 						}
 					}
 				}

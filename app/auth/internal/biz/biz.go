@@ -16,7 +16,7 @@ func ProvideJWT(sc *conf.Config) jwt.JWT {
 		SigningKey:  sc.Jwt.Secret,
 		ExpiredTime: sc.Jwt.AccessTtl.AsDuration(),
 		Issuer:      sc.Jwt.Issuer,
-	}, nil)
+	})
 }
 
 func ProvideBlackList(c cache.Cache) jwt.BlackListCache {

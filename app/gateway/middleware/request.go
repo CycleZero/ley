@@ -3,7 +3,7 @@ package middleware
 import (
 	"context"
 
-	config "github.com/go-kratos/gateway/api/gateway/config/v1"
+	config "github.com/CycleZero/ley/api/gateway/config/v1"
 	"github.com/go-kratos/kratos/v2/selector"
 )
 

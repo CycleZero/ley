@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/go-kratos/gateway/middleware"
+	"github.com/CycleZero/ley/app/gateway/middleware"
 )
 
 // BenchmarkMiddleware benchmarks the middleware performance

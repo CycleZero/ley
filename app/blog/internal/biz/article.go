@@ -107,19 +107,12 @@ type ArticleRepo interface {
 	// 标签关联
 	AssociateTags(ctx context.Context, articleID uint, tagIDs []uint) error
 	SyncTags(ctx context.Context, articleID uint, tagIDs []uint) error
-	ListTagsByArticleID(ctx context.Context, articleID uint) ([]*Tag, error)
 
-	// 点赞（幂等实现：ON CONFLICT DO NOTHING / DELETE WHERE exists）
 	InsertLike(ctx context.Context, articleID, userID uint) error
 	DeleteLike(ctx context.Context, articleID, userID uint) error
 	IsLiked(ctx context.Context, articleID, userID uint) (bool, error)
 
-	// 原子计数更新
 	IncrementViewCount(ctx context.Context, id uint, delta int64) error
-	IncrementCommentCount(ctx context.Context, id uint, delta int64) error
-
-	// 分类/标签计数同步（由 data 层在事务中与主更新一起执行）
-	UpdateCategoryCount(ctx context.Context, categoryID uint, delta int64) error
 	UpdateTagsArticleCount(ctx context.Context, tagIDs []uint, delta int64) error
 }
 
@@ -170,6 +163,7 @@ var (
 	ErrArticleContentTooBig    = kerrors.BadRequest("CONTENT_TOO_BIG", "文章内容不能超过 100000 个字符")
 	ErrNotArticleOwner         = kerrors.Forbidden("NOT_ARTICLE_OWNER", "只能操作自己的文章")
 	ErrArticleAlreadyPublished = kerrors.Conflict("ALREADY_PUBLISHED", "文章已发布")
+	ErrSlugAlreadyExists       = kerrors.Conflict("SLUG_ALREADY_EXISTS", "Slug 已被占用")
 	ErrUserNotAuthenticated    = kerrors.Unauthorized("NOT_AUTHENTICATED", "用户未认证")
 )
 

@@ -5,10 +5,10 @@ import (
 	"io"
 	"net/http"
 
+	config "github.com/CycleZero/ley/api/gateway/config/v1"
+	"github.com/CycleZero/ley/app/gateway/middleware"
 	"github.com/go-kratos/aegis/ratelimit"
 	"github.com/go-kratos/aegis/ratelimit/bbr"
-	config "github.com/go-kratos/gateway/api/gateway/config/v1"
-	"github.com/go-kratos/gateway/middleware"
 )
 
 var _nopBody = io.NopCloser(&bytes.Buffer{})

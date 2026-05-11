@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	config "github.com/go-kratos/gateway/api/gateway/config/v1"
+	config "github.com/CycleZero/ley/api/gateway/config/v1"
 )
 
 var nopBody = io.NopCloser(&bytes.Buffer{})

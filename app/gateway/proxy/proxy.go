@@ -16,13 +16,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	config "github.com/CycleZero/ley/api/gateway/config/v1"
+	"github.com/CycleZero/ley/app/gateway/client"
+	"github.com/CycleZero/ley/app/gateway/middleware"
+	"github.com/CycleZero/ley/app/gateway/router"
+	"github.com/CycleZero/ley/app/gateway/router/mux"
 	"github.com/go-kratos/aegis/circuitbreaker"
 	"github.com/go-kratos/aegis/circuitbreaker/sre"
-	config "github.com/go-kratos/gateway/api/gateway/config/v1"
-	"github.com/go-kratos/gateway/client"
-	"github.com/go-kratos/gateway/middleware"
-	"github.com/go-kratos/gateway/router"
-	"github.com/go-kratos/gateway/router/mux"
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/go-kratos/kratos/v2/selector"
 )

@@ -322,12 +322,21 @@ message CategoryInfo {
 message FileInfo { uint64 id = 1; string filename = 2; string mime_type = 3; int64 size = 4; string url = 5; string created_at = 6; }
 
 message SiteConfig {
-  string site_title = 1; string site_subtitle = 2; string site_description = 3;
-  string site_logo = 4; string site_favicon = 5;
-  string seo_keywords = 6; string seo_description = 7;
-  string social_github = 8; string social_twitter = 9; string social_email = 10;
-  string footer_text = 11; string icp_number = 12;
-  bool enable_comments = 13; bool enable_likes = 14; bool auto_approve_comments = 15;
+  string site_title = 1;            // 站点标题（浏览器标签页显示）
+  string site_subtitle = 2;         // 站点副标题（首页标语）
+  string site_description = 3;      // 站点简介（SEO description）
+  string site_logo = 4;             // 站点 Logo URL
+  string site_favicon = 5;          // 浏览器 Favicon URL
+  string seo_keywords = 6;          // SEO 关键词（meta keywords）
+  string seo_description = 7;       // SEO 描述（优先于 site_description）
+  string social_github = 8;         // GitHub 主页链接
+  string social_twitter = 9;        // Twitter 主页链接
+  string social_email = 10;         // 联系邮箱
+  string footer_text = 11;          // 页脚文案（版权声明等）
+  string icp_number = 12;           // ICP 备案号
+  bool enable_comments = 13;        // 全站评论开关
+  bool enable_likes = 14;           // 全站点赞开关
+  bool auto_approve_comments = 15;  // 评论自动审核通过（false=需管理员审核）
 }
 
 message SiteBackground { uint64 id = 1; string filename = 2; string url = 3; bool is_active = 4; int32 sort_order = 5; string created_at = 6; }

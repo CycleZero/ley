@@ -5,8 +5,8 @@ import (
 	"io"
 	"net/http"
 
-	configv1 "github.com/go-kratos/gateway/api/gateway/config/v1"
-	"github.com/go-kratos/gateway/middleware"
+	configv1 "github.com/CycleZero/ley/api/gateway/config/v1"
+	"github.com/CycleZero/ley/app/gateway/middleware"
 )
 
 func init() {

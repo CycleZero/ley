@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	config "github.com/go-kratos/gateway/api/gateway/config/v1"
-	"github.com/go-kratos/gateway/middleware"
+	config "github.com/CycleZero/ley/api/gateway/config/v1"
+	"github.com/CycleZero/ley/app/gateway/middleware"
 	"github.com/prometheus/client_golang/prometheus"
 )
 

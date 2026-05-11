@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
-	config "github.com/go-kratos/gateway/api/gateway/config/v1"
+	config "github.com/CycleZero/ley/api/gateway/config/v1"
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/go-kratos/kratos/v2/transport/http/status"
 )

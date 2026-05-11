@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"time"
 
+	config "github.com/CycleZero/ley/api/gateway/config/v1"
+	"github.com/CycleZero/ley/app/gateway/proxy/condition"
 	"github.com/go-kratos/feature"
-	config "github.com/go-kratos/gateway/api/gateway/config/v1"
-	"github.com/go-kratos/gateway/proxy/condition"
 )
 
 var (

@@ -9,12 +9,12 @@ import (
 	"strings"
 	"time"
 
+	config "github.com/CycleZero/ley/api/gateway/config/v1"
 	"github.com/go-kratos/kratos/v2/selector"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/net/http2"
 
-	config "github.com/go-kratos/gateway/api/gateway/config/v1"
-	"github.com/go-kratos/gateway/middleware"
+	"github.com/CycleZero/ley/app/gateway/middleware"
 )
 
 var _ selector.Node = &node{}

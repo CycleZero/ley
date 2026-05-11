@@ -130,11 +130,6 @@ func (r *tagRepo) Delete(ctx context.Context, id uint) error {
 	return result.Error
 }
 
-func (r *tagRepo) IncrementArticleCount(ctx context.Context, id uint, delta int64) error {
-	return r.data.db.WithContext(ctx).Model(&TagPO{}).Where("id = ?", id).
-		UpdateColumn("article_count", gorm.Expr("GREATEST(article_count + ?, 0)", delta)).Error
-}
-
 // =============================================================================
 // categoryRepo — biz.CategoryRepo 接口实现
 // =============================================================================

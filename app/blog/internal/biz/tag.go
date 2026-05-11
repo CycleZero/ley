@@ -35,7 +35,6 @@ type TagRepo interface {
 	FindOrCreate(ctx context.Context, name, slug string) (*Tag, error)
 	List(ctx context.Context) ([]*Tag, error)
 	Delete(ctx context.Context, id uint) error
-	IncrementArticleCount(ctx context.Context, id uint, delta int64) error
 }
 
 // =============================================================================

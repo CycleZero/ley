@@ -3,8 +3,8 @@ package service
 import (
 	"context"
 
-	blogv1 "ley/api/blog/v1"
-	"ley/app/blog/internal/biz"
+	blogv1 "github.com/CycleZero/ley/api/blog/v1"
+	"github.com/CycleZero/ley/app/blog/internal/biz"
 
 	"github.com/go-kratos/kratos/v2/log"
 )
@@ -85,8 +85,7 @@ func toSiteConfig(c *biz.SiteSetting) *blogv1.SiteConfig {
 	}
 	return &blogv1.SiteConfig{
 		SiteTitle: c.SiteTitle, SiteSubtitle: c.SiteSubtitle, SiteDescription: c.SiteDescription,
-		SiteLogo: c.SiteLogo, SiteFavicon: c.SiteFavicon,
-		SeoKeywords: c.SeoKeywords, SeoDescription: c.SeoDescription,
+		SiteLogo: c.SiteLogo, SiteFavicon: c.SiteFavicon, SeoKeywords: c.SeoKeywords, SeoDescription: c.SeoDescription,
 		SocialGithub: c.SocialGithub, SocialTwitter: c.SocialTwitter, SocialEmail: c.SocialEmail,
 		FooterText: c.FooterText, IcpNumber: c.ICPNumber,
 		EnableComments: c.EnableComments, EnableLikes: c.EnableLikes, AutoApproveComments: c.AutoApproveComments,
@@ -99,8 +98,7 @@ func fromSiteConfig(c *blogv1.SiteConfig) *biz.SiteSetting {
 	}
 	return &biz.SiteSetting{
 		SiteTitle: c.SiteTitle, SiteSubtitle: c.SiteSubtitle, SiteDescription: c.SiteDescription,
-		SiteLogo: c.SiteLogo, SiteFavicon: c.SiteFavicon,
-		SeoKeywords: c.SeoKeywords, SeoDescription: c.SeoDescription,
+		SiteLogo: c.SiteLogo, SiteFavicon: c.SiteFavicon, SeoKeywords: c.SeoKeywords, SeoDescription: c.SeoDescription,
 		SocialGithub: c.SocialGithub, SocialTwitter: c.SocialTwitter, SocialEmail: c.SocialEmail,
 		FooterText: c.FooterText, ICPNumber: c.IcpNumber,
 		EnableComments: c.EnableComments, EnableLikes: c.EnableLikes, AutoApproveComments: c.AutoApproveComments,

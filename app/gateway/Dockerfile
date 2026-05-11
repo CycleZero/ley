@@ -1,36 +1,38 @@
 # ================================
 # Stage 1: Builder
 # ================================
-FROM golang:1.23-alpine AS builder
+FROM ley-builder:v1 AS builder
 
 ARG GOPROXY=https://goproxy.cn,direct
-ENV GOPROXY=$GOPROXY
-
-RUN apk add --no-cache git
+ARG SERVICE_NAME=gateway
 
 WORKDIR /src
 
-# 网关是独立 Go module，只复制自身代码
-COPY app/gateway/go.mod app/gateway/go.sum ./
+COPY go.mod go.sum ./
 RUN go mod download
 
-COPY app/gateway/ ./
+COPY . .
 
-RUN go build -o /app/gateway ./cmd/gateway
+RUN make api && make config && make internal_proto && make wire
+
+RUN go build -o /app/server ./app/${SERVICE_NAME}/cmd/${SERVICE_NAME}
 
 # ================================
 # Stage 2: Runtime
 # ================================
-FROM alpine:latest
+FROM ley-runtime:v1
 
-RUN apk add --no-cache ca-certificates tzdata
-ENV TZ=Asia/Shanghai
+COPY --from=builder /app/server /app/server
+
+RUN groupadd -g 1000 appgroup && \
+    useradd -u 1000 -g appgroup -m appuser
+
+USER appuser
 
 WORKDIR /app
-COPY --from=builder /app/gateway .
 
-RUN mkdir -p /app/data
+RUN mkdir -p /app/data && chown -R appuser:appgroup /app /app/data
 
 VOLUME /app/data
 
-CMD ["./gateway"]
+CMD ["./server"]

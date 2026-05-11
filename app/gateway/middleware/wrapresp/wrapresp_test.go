@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/go-kratos/gateway/middleware"
+	"github.com/CycleZero/ley/app/gateway/middleware"
 )
 
 func TestMiddleware_SuccessResponse(t *testing.T) {
@@ -162,11 +162,11 @@ func TestBuildErrorResponse(t *testing.T) {
 
 func TestExtractErrorMsg(t *testing.T) {
 	tests := []struct {
-		name        string
-		data        string
-		field       string
-		defaultMsg  string
-		want        string
+		name       string
+		data       string
+		field      string
+		defaultMsg string
+		want       string
 	}{
 		{
 			name:       "field exists",

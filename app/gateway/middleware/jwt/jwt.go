@@ -9,12 +9,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	config "github.com/CycleZero/ley/api/gateway/config/v1"
+	"github.com/CycleZero/ley/api/gateway/middleware/jwt/v1"
 	jwtpkg "github.com/CycleZero/ley/pkg/jwt"
 	"github.com/CycleZero/ley/pkg/meta"
+	clientv3 "go.etcd.io/etcd/client/v3"
 
-	config "github.com/go-kratos/gateway/api/gateway/config/v1"
-	v1 "github.com/go-kratos/gateway/api/gateway/middleware/jwt/v1"
-	"github.com/go-kratos/gateway/middleware"
+	"github.com/CycleZero/ley/app/gateway/middleware"
 	"github.com/go-kratos/kratos/v2/log"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"

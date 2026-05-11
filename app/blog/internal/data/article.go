@@ -92,7 +92,7 @@ func (r *articleRepo) Create(ctx context.Context, a *biz.Article) error {
 	if err := r.data.db.WithContext(ctx).Create(po).Error; err != nil {
 		if util.IsUniqueViolation(err) {
 			r.data.log.WithContext(ctx).Warnf("[ArticleRepo.Create] slug冲突 slug=%q", a.Slug)
-			return biz.ErrArticleNotFound // slug 重复
+			return biz.ErrSlugAlreadyExists
 		}
 		r.data.log.WithContext(ctx).Errorf("[ArticleRepo.Create] 插入失败 title=%q err=%v", a.Title, err)
 		return fmt.Errorf("create article: %w", err)
@@ -307,16 +307,6 @@ func (r *articleRepo) IncrementViewCount(ctx context.Context, id uint, delta int
 		UpdateColumn("view_count", gorm.Expr("view_count + ?", delta)).Error
 }
 
-func (r *articleRepo) IncrementCommentCount(ctx context.Context, id uint, delta int64) error {
-	return r.data.db.WithContext(ctx).Model(&ArticlePO{}).Where("id = ?", id).
-		UpdateColumn("comment_count", gorm.Expr("GREATEST(comment_count + ?, 0)", delta)).Error
-}
-
-func (r *articleRepo) UpdateCategoryCount(ctx context.Context, categoryID uint, delta int64) error {
-	return r.data.db.WithContext(ctx).Model(&CategoryPO{}).Where("id = ?", categoryID).
-		UpdateColumn("article_count", gorm.Expr("GREATEST(article_count + ?, 0)", delta)).Error
-}
-
 func (r *articleRepo) UpdateTagsArticleCount(ctx context.Context, tagIDs []uint, delta int64) error {
 	return r.data.db.WithContext(ctx).Model(&TagPO{}).Where("id IN ?", tagIDs).
 		UpdateColumn("article_count", gorm.Expr("GREATEST(article_count + ?, 0)", delta)).Error
@@ -353,22 +343,6 @@ func (r *articleRepo) SyncTags(ctx context.Context, articleID uint, tagIDs []uin
 		}
 		return tx.Create(&tags).Error
 	})
-}
-
-// ListTagsByArticleID 查询文章关联的标签
-func (r *articleRepo) ListTagsByArticleID(ctx context.Context, articleID uint) ([]*biz.Tag, error) {
-	var tags []TagPO
-	err := r.data.db.WithContext(ctx).
-		Joins("JOIN \"article\".articles_tags at2 ON at2.tag_id = \"article\".tags.id").
-		Where("at2.article_id = ?", articleID).Find(&tags).Error
-	if err != nil {
-		return nil, err
-	}
-	result := make([]*biz.Tag, 0, len(tags))
-	for i := range tags {
-		result = append(result, tagPOToBiz(&tags[i]))
-	}
-	return result, nil
 }
 
 // =============================================================================

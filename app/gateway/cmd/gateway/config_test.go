@@ -3,11 +3,11 @@ package main
 import (
 	"testing"
 
-	configv1 "github.com/go-kratos/gateway/api/gateway/config/v1"
-	circuitbreakerv1 "github.com/go-kratos/gateway/api/gateway/middleware/circuitbreaker/v1"
-	corsv1 "github.com/go-kratos/gateway/api/gateway/middleware/cors/v1"
-	rewritev1 "github.com/go-kratos/gateway/api/gateway/middleware/rewrite/v1"
-	tracingv1 "github.com/go-kratos/gateway/api/gateway/middleware/tracing/v1"
+	configv1 "github.com/CycleZero/ley/api/gateway/config/v1"
+	circuitbreakerv1 "github.com/CycleZero/ley/api/gateway/middleware/circuitbreaker/v1"
+	corsv1 "github.com/CycleZero/ley/api/gateway/middleware/cors/v1"
+	rewritev1 "github.com/CycleZero/ley/api/gateway/middleware/rewrite/v1"
+	tracingv1 "github.com/CycleZero/ley/api/gateway/middleware/tracing/v1"
 	"github.com/go-kratos/kratos/v2/config"
 	"github.com/go-kratos/kratos/v2/config/file"
 	"google.golang.org/protobuf/encoding/protojson"

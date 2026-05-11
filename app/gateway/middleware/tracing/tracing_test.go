@@ -7,9 +7,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	config "github.com/go-kratos/gateway/api/gateway/config/v1"
-	v1 "github.com/go-kratos/gateway/api/gateway/middleware/tracing/v1"
-	"github.com/go-kratos/gateway/middleware"
+	config "github.com/CycleZero/ley/api/gateway/config/v1"
+	"github.com/CycleZero/ley/api/gateway/middleware/tracing/v1"
+	"github.com/CycleZero/ley/app/gateway/middleware"
 	"google.golang.org/protobuf/types/known/anypb"
 )
 

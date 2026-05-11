@@ -6,11 +6,11 @@ ifeq ($(GOHOSTOS), windows)
 	Git_Bash="/c/Program Files/Git/bin/bash.exe"
 	INTERNAL_PROTO_FILES=$(shell $(Git_Bash) -c "cd `pwd` && find app -name *.proto -not -path '*/gateway/*'")
 	CONFIG_PROTO_FILES=$(shell $(Git_Bash) -c "cd `pwd` && find conf -name *.proto")
-	API_PROTO_FILES=$(shell $(Git_Bash) -c "cd `pwd` && find api -name *.proto")
+	API_PROTO_FILES=$(shell $(Git_Bash) -c "cd `pwd` && find api -name *.proto -not -path '*/gateway/*'")
 	INTERNAL_CONFIG_PROTO_FILES=$(shell $(Git_Bash) -c "cd `pwd` && find app -path '*/internal/conf/*.proto' -not -path '*/gateway/*'")
 else
 	INTERNAL_PROTO_FILES=$(shell find app -name *.proto -not -path '*/gateway/*')
-	API_PROTO_FILES=$(shell find api -name *.proto)
+	API_PROTO_FILES=$(shell find api -name *.proto -not -path '*/gateway/*')
 	CONFIG_PROTO_FILES=$(shell find conf -name *.proto)
 	INTERNAL_CONFIG_PROTO_FILES=$(shell find app -path '*/internal/conf/*.proto' -not -path '*/gateway/*')
 endif

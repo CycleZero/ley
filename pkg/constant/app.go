@@ -11,6 +11,7 @@ const (
 	ServiceNameGreeter    = "greeter"
 	ServiceNameAttachment = "attachment"
 	ServiceNameBlog       = "blog"
+	ServiceNameAuth       = "auth"
 )
 
 const (

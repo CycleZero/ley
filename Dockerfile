@@ -6,7 +6,8 @@ ENV GOPROXY=${GOPROXY}
 
 
 # 安装必要的构建工具（包含 CGO 编译所需的 gcc 和 musl-dev）
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN sed -i 's/deb.debian.org/mirrors.ustc.edu.cn/g' /etc/apt/sources.list.d/debian.sources && \
+    apt-get update && apt-get install -y --no-install-recommends \
     git make bash gcc libc6-dev curl unzip \
     && rm -rf /var/lib/apt/lists/*
 

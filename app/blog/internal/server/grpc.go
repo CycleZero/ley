@@ -12,7 +12,7 @@ import (
 	"github.com/go-kratos/kratos/v2/transport/grpc"
 )
 
-func NewGRPCServer(bs *leyconf.Bootstrap, articleSvc *service.ArticleService, tagSvc *service.TagService, catSvc *service.CategoryService, fileSvc *service.FileService, logger log.Logger) *grpc.Server {
+func NewGRPCServer(bs *leyconf.Bootstrap, articleSvc *service.ArticleService, tagSvc *service.TagService, catSvc *service.CategoryService, fileSvc *service.FileService, siteSvc *service.SiteService, logger log.Logger) *grpc.Server {
 	var opts []grpc.ServerOption
 	if bs.Server != nil && bs.Server.Grpc != nil {
 		if addr := strings.TrimSpace(bs.Server.Grpc.Addr); addr != "" {
@@ -31,6 +31,7 @@ func NewGRPCServer(bs *leyconf.Bootstrap, articleSvc *service.ArticleService, ta
 	blogv1.RegisterTagServiceServer(srv, tagSvc)
 	blogv1.RegisterCategoryServiceServer(srv, catSvc)
 	blogv1.RegisterFileServiceServer(srv, fileSvc)
+	blogv1.RegisterSiteServiceServer(srv, siteSvc)
 
 	return srv
 }

@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-kratos/gateway/proxy/debug"
+	"github.com/CycleZero/ley/app/gateway/proxy/debug"
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/go-kratos/kratos/v2/registry"
 	"github.com/google/uuid"

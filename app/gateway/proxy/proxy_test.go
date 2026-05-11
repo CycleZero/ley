@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	config "github.com/go-kratos/gateway/api/gateway/config/v1"
-	"github.com/go-kratos/gateway/client"
-	"github.com/go-kratos/gateway/middleware"
-	"github.com/go-kratos/gateway/middleware/logging"
+	config "github.com/CycleZero/ley/api/gateway/config/v1"
+	"github.com/CycleZero/ley/app/gateway/client"
+	"github.com/CycleZero/ley/app/gateway/middleware"
+	"github.com/CycleZero/ley/app/gateway/middleware/logging"
 )
 
 type responseWriter struct {

@@ -14,7 +14,7 @@ import (
 	khttp "github.com/go-kratos/kratos/v2/transport/http"
 )
 
-func NewHTTPServer(bs *leyconf.Bootstrap, articleSvc *service.ArticleService, tagSvc *service.TagService, catSvc *service.CategoryService, fileSvc *service.FileService, logger log.Logger) *khttp.Server {
+func NewHTTPServer(bs *leyconf.Bootstrap, articleSvc *service.ArticleService, tagSvc *service.TagService, catSvc *service.CategoryService, fileSvc *service.FileService, siteSvc *service.SiteService, logger log.Logger) *khttp.Server {
 	var opts []khttp.ServerOption
 	if bs.Server != nil && bs.Server.Http != nil {
 		if addr := strings.TrimSpace(bs.Server.Http.Addr); addr != "" {
@@ -33,6 +33,7 @@ func NewHTTPServer(bs *leyconf.Bootstrap, articleSvc *service.ArticleService, ta
 	blogv1.RegisterTagServiceHTTPServer(srv, tagSvc)
 	blogv1.RegisterCategoryServiceHTTPServer(srv, catSvc)
 	blogv1.RegisterFileServiceHTTPServer(srv, fileSvc)
+	blogv1.RegisterSiteServiceHTTPServer(srv, siteSvc)
 
 	srv.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

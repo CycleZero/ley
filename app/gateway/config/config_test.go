@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	configv1 "github.com/go-kratos/gateway/api/gateway/config/v1"
-	corsv1 "github.com/go-kratos/gateway/api/gateway/middleware/cors/v1"
-	tracingv1 "github.com/go-kratos/gateway/api/gateway/middleware/tracing/v1"
+	configv1 "github.com/CycleZero/ley/api/gateway/config/v1"
+	corsv1 "github.com/CycleZero/ley/api/gateway/middleware/cors/v1"
+	tracingv1 "github.com/CycleZero/ley/api/gateway/middleware/tracing/v1"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"

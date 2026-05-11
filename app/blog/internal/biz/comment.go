@@ -68,7 +68,9 @@ type CommentRepo interface {
 // =============================================================================
 
 var (
-	ErrCommentNotFound = kerrors.NotFound("COMMENT_NOT_FOUND", "评论不存在")
+	ErrCommentNotFound  = kerrors.NotFound("COMMENT_NOT_FOUND", "评论不存在")
+	ErrNotCommentOwner  = kerrors.Forbidden("NOT_COMMENT_OWNER", "只能操作自己的评论")
+	ErrMaxDepthExceeded = kerrors.BadRequest("MAX_DEPTH_EXCEEDED", "评论嵌套深度超过限制（5层）")
 )
 
 type CommentUseCase struct {

@@ -7,4 +7,5 @@ var ProviderSet = wire.NewSet(
 	NewTagService,
 	NewCategoryService,
 	NewFileService,
+	NewSiteService,
 )
