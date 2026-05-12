@@ -1,6 +1,6 @@
 syntax = "proto3";
 package gateway.middleware.rewrite.v1;
-option go_package =  "github.com/go-kratos/gateway/api/gateway/middleware/rewrite/v1";
+option go_package =  "github.com/CycleZero/ley/api/gateway/middleware/rewrite/v1";
 
 // Rewrite middleware config.
 message HeadersPolicy {

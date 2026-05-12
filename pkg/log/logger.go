@@ -1,11 +1,13 @@
 package log
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fatih/color"
@@ -26,6 +28,21 @@ var (
 	Yellow = color.New(color.FgHiYellow).SprintFunc()
 	Green  = color.New(color.FgHiGreen).SprintFunc()
 )
+
+// UseLawAsyncWriter 文件日志异步引擎选择：
+//
+//	false (默认): chan + 自实现, 零外部依赖, 锁竞争低
+//	true:         law.WriteAsyncer, MPSC 队列, 外部依赖 shengyanli1982/law
+var UseLawAsyncWriter = true
+
+// UseLawConsoleWriter 控制台日志异步引擎选择：
+//
+//	false (默认): bufio + LockedWriteSyncer, 简单高效
+//	true:         law.WriteAsyncer, 与控制台异步写入统一引擎
+var UseLawConsoleWriter = true
+
+var EnableAsyncConsoleLog = false
+var EnableAsyncFileLog = true
 
 type Logger struct {
 	*zap.Logger
@@ -56,7 +73,7 @@ func NewLogger(
 	}
 
 	// 编码器配置（带颜色）
-	_ = zapcore.EncoderConfig{
+	colorEncoderConfig := zapcore.EncoderConfig{
 		TimeKey:  "T",
 		LevelKey: "L",
 		NameKey:  "N",
@@ -88,52 +105,56 @@ func NewLogger(
 	}
 
 	//TODO
-	isDev := mode == 1
+	isDev := mode == 0
 
 	// 控制台写入器
-
 	var consoleEncoder zapcore.Encoder
 	var fileEncoder zapcore.Encoder
 
 	if isDev {
-		// 开发模式：控制台使用彩色编码器
-		consoleEncoder = zapcore.NewConsoleEncoder(plainEncoderConfig)
+		consoleEncoder = zapcore.NewConsoleEncoder(colorEncoderConfig)
 		color.NoColor = false
-		// 文件使用普通编码器（无颜色）
 		fileEncoder = zapcore.NewConsoleEncoder(plainEncoderConfig)
 	} else {
-		// 生产模式：都使用 JSON 编码器（无颜色）
 		consoleEncoder = &CustomEncoder{zapcore.NewJSONEncoder(plainEncoderConfig)}
 		fileEncoder = zapcore.NewJSONEncoder(plainEncoderConfig)
 	}
 
-	//创建writer
-	consoleWriter := color.Output
-	//consoleAsyncWriter := NewAsyncWriter(consoleWriter)
-	consoleWriterSyncer := zapcore.AddSync(consoleWriter)
-
-	var fileWriteSyncer zapcore.WriteSyncer
-	// 文件写入器（如果配置了路径）
-	if logPath != "" {
-		fileWriter := NewFileWriter(logPath)
-		fileAsyncWriter := NewAsyncWriter(fileWriter)
-		fileWriteSyncer = zapcore.AddSync(fileAsyncWriter)
+	// 控制台输出：同步直写 color.Output，简单可靠
+	//consoleWriterSyncer := zapcore.AddSync(color.Output)
+	var consoleWriterSyncer zapcore.WriteSyncer
+	if !EnableAsyncConsoleLog {
+		consoleWriterSyncer = zapcore.AddSync(color.Output)
+	} else {
+		if UseLawConsoleWriter {
+			consoleWriterSyncer = zapcore.AddSync(NewLawAsyncWriter(color.Output))
+		} else {
+			consoleWriterSyncer = NewBufferedWriteSyncer(color.Output, 64*1024)
+		}
 	}
 
-	// 创建多个 core
+	var fileWriteSyncer zapcore.WriteSyncer
+	if logPath != "" {
+		if !EnableAsyncFileLog {
+			consoleWriterSyncer = zapcore.AddSync(NewFileWriter(logPath))
+		} else {
+			if UseLawAsyncWriter {
+				fileWriteSyncer = zapcore.AddSync(NewLawAsyncWriter(NewFileWriter(logPath)))
+			} else {
+				fileWriteSyncer = NewAsyncWriteSyncer(NewFileWriter(logPath), 256*1024)
+			}
+		}
+
+		//fileWriteSyncer = zapcore.AddSync(NewFileWriter(logPath))
+	}
+
 	var cores []zapcore.Core
-
-	// 控制台 core
 	cores = append(cores, zapcore.NewCore(consoleEncoder, consoleWriterSyncer, zLevel))
-
-	// 文件 core（如果有文件路径）
 	if logPath != "" && fileWriteSyncer != nil {
 		cores = append(cores, zapcore.NewCore(fileEncoder, fileWriteSyncer, zLevel))
 	}
 
-	// 使用 NewTee 合并多个 core，实现同时输出
 	core := zapcore.NewTee(cores...)
-
 	return &Logger{zap.New(core)}, nil
 }
 
@@ -215,11 +236,93 @@ func SetGlobalLogger(l *Logger) {
 	globalLogger = l
 }
 
-func NewAsyncWriter(w io.Writer) *law.WriteAsyncer {
+// ============================================================
+// 高性能日志 Writer
+// ============================================================
+
+// bufferedWriteSyncer 缓冲同步写入器：包装 bufio.Writer，减少 write syscall 次数
+type bufferedWriteSyncer struct {
+	w  *bufio.Writer
+	mu sync.Mutex
+}
+
+func NewBufferedWriteSyncer(w io.Writer, size int) *bufferedWriteSyncer {
+	return &bufferedWriteSyncer{w: bufio.NewWriterSize(w, size)}
+}
+
+func (s *bufferedWriteSyncer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	n, err := s.w.Write(p)
+	s.mu.Unlock()
+	return n, err
+}
+
+func (s *bufferedWriteSyncer) Sync() error {
+	s.mu.Lock()
+	err := s.w.Flush()
+	s.mu.Unlock()
+	return err
+}
+
+// asyncWriteSyncer 异步写入器：chan 解耦日志生产与磁盘 I/O
+// Go chan 内部无全局锁，与 law.MPSCQueue(mutex) 不同，高并发下保持高性能
+type asyncWriteSyncer struct {
+	ch      chan []byte
+	bufPool sync.Pool
+	wg      sync.WaitGroup
+	w       io.WriteCloser
+	bufW    *bufio.Writer
+}
+
+func NewAsyncWriteSyncer(w io.WriteCloser, bufSize int) *asyncWriteSyncer {
+	s := &asyncWriteSyncer{
+		ch:   make(chan []byte, 4096), // 4K 缓冲，远超瞬时日志峰值
+		w:    w,
+		bufW: bufio.NewWriterSize(w, bufSize),
+	}
+	s.bufPool.New = func() any { return make([]byte, 0, 4096) }
+	s.wg.Add(1)
+	go s.drain()
+	return s
+}
+
+func (s *asyncWriteSyncer) drain() {
+	defer s.wg.Done()
+	for data := range s.ch {
+		s.bufW.Write(data)
+		s.bufPool.Put(data[:0])
+	}
+	s.bufW.Flush()
+	s.w.Close()
+}
+
+func (s *asyncWriteSyncer) Write(p []byte) (int, error) {
+	buf := s.bufPool.Get().([]byte)
+	buf = append(buf[:0], p...)
+	s.ch <- buf // 阻塞写入，保证日志完整性；Go chan 内部无全局锁，高并发下高效
+	return len(p), nil
+}
+
+func (s *asyncWriteSyncer) Sync() error { return nil }
+
+func (s *asyncWriteSyncer) Close() {
+	close(s.ch)
+	s.wg.Wait()
+}
+
+// ============================================================
+// law 异步写入器 (可选, UseLawAsyncWriter=true 时生效)
+// ============================================================
+
+func NewLawAsyncWriter(w io.Writer) *law.WriteAsyncer {
 	conf := law.NewConfig()
-	conf.WithBufferSize(1024 * 1024 * 2)
+	conf.WithBufferSize(1024 * 1024 * 10)
 	return law.NewWriteAsyncer(w, conf)
 }
+
+// ============================================================
+// Kratos 适配
+// ============================================================
 
 func GetKratosLogger() log.Logger {
 	l := kratoszap.NewLogger(GetLogger().Logger)

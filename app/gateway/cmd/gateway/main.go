@@ -23,7 +23,9 @@ import (
 	_ "github.com/CycleZero/ley/app/gateway/middleware/bbr"
 	"github.com/CycleZero/ley/app/gateway/middleware/circuitbreaker"
 	_ "github.com/CycleZero/ley/app/gateway/middleware/cors"
+	_ "github.com/CycleZero/ley/app/gateway/middleware/jwt"
 	_ "github.com/CycleZero/ley/app/gateway/middleware/logging"
+	_ "github.com/CycleZero/ley/app/gateway/middleware/ratelimit"
 	_ "github.com/CycleZero/ley/app/gateway/middleware/rewrite"
 	_ "github.com/CycleZero/ley/app/gateway/middleware/streamrecorder"
 	_ "github.com/CycleZero/ley/app/gateway/middleware/tracing"
@@ -72,11 +74,11 @@ func init() {
 
 	flag.BoolVar(&withDebug, "debug", false, "enable debug handlers")
 	flag.Var(&proxyAddrs, "addr", "proxy address, eg: -addr 0.0.0.0:8080")
-	flag.StringVar(&proxyConfig, "conf", "config.yaml", "config path, eg: -conf config.yaml")
+	flag.StringVar(&proxyConfig, "conf", "./data/gateway/configs/config.yaml", "config path, eg: -conf config.yaml")
 	flag.StringVar(&priorityConfigDir, "conf.priority", "", "priority config directory, eg: -conf.priority ./canary")
 	flag.StringVar(&ctrlName, "ctrl.name", os.Getenv("ADVERTISE_NAME"), "control gateway name, eg: gateway")
 	flag.StringVar(&ctrlService, "ctrl.service", "", "control service host, eg: http://127.0.0.1:8000")
-	flag.StringVar(&discoveryDSN, "discovery.dsn", "", "discovery dsn, eg: consul://127.0.0.1:7070?token=secret&datacenter=prod")
+	flag.StringVar(&discoveryDSN, "discovery.dsn", "etcd://127.0.0.1:2379", "discovery dsn, eg: consul://127.0.0.1:7070?token=secret&datacenter=prod")
 }
 
 func makeDiscovery() registry.Discovery {

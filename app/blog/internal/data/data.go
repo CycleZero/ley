@@ -106,22 +106,40 @@ var ProviderSet = wire.NewSet(
 )
 
 // NewArticleRepo 创建 ArticleRepo 实现。
-func NewArticleRepo(d *Data) biz.ArticleRepo { return &articleRepo{data: d} }
+func NewArticleRepo(d *Data) biz.ArticleRepo {
+	d.db.AutoMigrate(&ArticlePO{}, &ArticleTagPO{}, &ArticleLikePO{})
+	return &articleRepo{data: d}
+}
 
 // NewCommentRepo 创建 CommentRepo 实现。
-func NewCommentRepo(d *Data) biz.CommentRepo { return &commentRepo{data: d} }
+func NewCommentRepo(d *Data) biz.CommentRepo {
+	d.db.AutoMigrate(&CommentPO{})
+	return &commentRepo{data: d}
+}
 
 // NewTagRepo 创建 TagRepo 实现。
-func NewTagRepo(d *Data) biz.TagRepo { return &tagRepo{data: d} }
+func NewTagRepo(d *Data) biz.TagRepo {
+	d.db.AutoMigrate(&TagPO{})
+	return &tagRepo{data: d}
+}
 
 // NewCategoryRepo 创建 CategoryRepo 实现。
-func NewCategoryRepo(d *Data) biz.CategoryRepo { return &categoryRepo{data: d} }
+func NewCategoryRepo(d *Data) biz.CategoryRepo {
+	d.db.AutoMigrate(&CategoryPO{})
+	return &categoryRepo{data: d}
+}
 
 // NewFileRepo 创建 FileRepo 实现（依赖 MinIO）。
-func NewFileRepo(d *Data, oss oss.OSS) biz.FileRepo { return &fileRepo{data: d, oss: oss} }
+func NewFileRepo(d *Data, oss oss.OSS) biz.FileRepo {
+	d.db.AutoMigrate(&FilePO{})
+	return &fileRepo{data: d, oss: oss}
+}
 
 // NewSiteRepo 创建 SiteRepo 实现（依赖 MinIO）。
-func NewSiteRepo(d *Data, oss oss.OSS) biz.SiteRepo { return &siteRepo{data: d, oss: oss} }
+func NewSiteRepo(d *Data, oss oss.OSS) biz.SiteRepo {
+	d.db.AutoMigrate(&SiteSettingPO{}, &SiteBackgroundPO{})
+	return &siteRepo{data: d, oss: oss}
+}
 
 // nullSentinel 空值标记 — 写入缓存表示数据库确认该记录不存在。
 const nullSentinel = "null"

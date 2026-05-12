@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/CycleZero/ley/pkg/constant"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/go-kratos/kratos/v2/registry"
 	grpcx "github.com/go-kratos/kratos/v2/transport/grpc"
@@ -57,4 +58,8 @@ func ServiceId(serviceName string) string {
 		return serviceName + "." + i
 	}
 	return host + "." + serviceName + "." + i
+}
+
+func DisServiceName(serviceName string) string {
+	return constant.AppName + "." + serviceName
 }

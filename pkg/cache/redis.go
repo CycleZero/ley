@@ -80,6 +80,51 @@ func (r *RedisCache) Delete(ctx context.Context, key string) error {
 	return r.client.Del(ctx, key).Err()
 }
 
+// SetNX 仅当键不存在时设置值，返回 true 表示设置成功。
+func (r *RedisCache) SetNX(ctx context.Context, key string, value any, expiration time.Duration) (bool, error) {
+	var data []byte
+	var err error
+	switch v := value.(type) {
+	case []byte:
+		data = v
+	case string:
+		data = []byte(v)
+	default:
+		data, err = json.Marshal(v)
+		if err != nil {
+			return false, err
+		}
+	}
+	return r.client.SetNX(ctx, key, data, expiration).Result()
+}
+
+// Incr 原子自增，返回自增后的值。
+func (r *RedisCache) Incr(ctx context.Context, key string) (int64, error) {
+	return r.client.Incr(ctx, key).Result()
+}
+
+// Expire 设置键的过期时间。
+func (r *RedisCache) Expire(ctx context.Context, key string, expiration time.Duration) error {
+	return r.client.Expire(ctx, key, expiration).Err()
+}
+
+// MGet 批量获取缓存值，键不存在的对应位置为 nil。
+func (r *RedisCache) MGet(ctx context.Context, keys ...string) ([][]byte, error) {
+	vals, err := r.client.MGet(ctx, keys...).Result()
+	if err != nil {
+		return nil, err
+	}
+	result := make([][]byte, 0, len(vals))
+	for _, v := range vals {
+		if v == nil {
+			result = append(result, nil)
+		} else {
+			result = append(result, []byte(v.(string)))
+		}
+	}
+	return result, nil
+}
+
 // Exists 判断键是否存在
 func (r *RedisCache) Exists(ctx context.Context, key string) (bool, error) {
 	n, err := r.client.Exists(ctx, key).Result()

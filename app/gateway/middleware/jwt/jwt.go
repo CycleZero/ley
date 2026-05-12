@@ -202,18 +202,15 @@ func buildHandler(options *v1.JWT, holder *jwtHolder) middleware.Middleware {
 			req.Header.Set(meta.AuthUserIDKey, strconv.FormatUint(claims.UserId, 10))
 			req.Header.Set(meta.AuthUserNameKey, claims.UserName)
 
-			ctx := req.Context()
-			ctx = context.WithValue(ctx, "user_id", claims.UserId)
-			ctx = context.WithValue(ctx, "user_name", claims.UserName)
-
-			reqMeta := &meta.RequestMetaData{
-				Auth: meta.Auth{
-					UserID:   claims.UserId,
-					UserName: claims.UserName,
-				},
-			}
-			ctx = meta.NewClientCtx(ctx, reqMeta)
-			return next.RoundTrip(req.WithContext(ctx))
+		ctx := req.Context()
+		reqMeta := &meta.RequestMetaData{
+			Auth: meta.Auth{
+				UserID:   claims.UserId,
+				UserName: claims.UserName,
+			},
+		}
+		ctx = meta.NewClientCtx(ctx, reqMeta)
+		return next.RoundTrip(req.WithContext(ctx))
 		})
 	}
 }

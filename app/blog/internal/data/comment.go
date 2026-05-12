@@ -25,7 +25,7 @@ type CommentPO struct {
 	Status    int8   `gorm:"column:status;type:smallint;default:0"`
 }
 
-func (CommentPO) TableName() string { return "comment.comments" }
+func (CommentPO) TableName() string { return "comments" }
 
 // =============================================================================
 // commentRepo — biz.CommentRepo 接口实现

@@ -1,0 +1,54 @@
+# ================================
+# Ley — Auth 服务示例配置
+# ================================
+# 本地开发：将此文件复制到 ./data/auth/configs/config.yaml
+# 生产部署：通过 etcd 下发，路径 /ley/configs/auth/config.yaml
+# 启动命令：./auth -conf ./data/auth/configs
+
+# ================================
+# Bootstrap 配置（本地读取）
+# ================================
+server:
+  http:
+    network: tcp
+    addr: 0.0.0.0:8001       # HTTP 端口
+    timeout: 3s
+  grpc:
+    network: tcp
+    addr: 0.0.0.0:9001       # gRPC 端口
+    timeout: 3s
+
+log:
+  level: Debug                # Debug | Info | Warn | Error
+  path: ./data/logs           # 日志文件目录
+  mode: Dev                   # Dev=控制台输出, Prod=JSON文件
+
+etcd:
+  endpoints:
+    - 127.0.0.1:2379          # etcd 地址（服务注册 + 配置中心）
+
+trace:
+  endpoint: http://127.0.0.1:4318   # Jaeger OTLP HTTP 地址
+
+# ================================
+# 服务专用配置（etcd 下发，本地为 fallback）
+# ================================
+data:
+  database:
+    driver: postgres
+    host: 127.0.0.1
+    port: 5432
+    database: ley
+    username: ley
+    password: ley123
+  redis:
+    host: 127.0.0.1
+    port: 6379
+    password: ""
+    db: 0                     # Auth 使用 Redis DB 0（黑名单 + 用户缓存）
+
+jwt:
+  secret: "change-me-in-production-use-256bit-random-key"
+  access_ttl: 900s            # AccessToken 有效期 15min
+  refresh_ttl: 604800s        # RefreshToken 有效期 7d
+  issuer: "ley-auth"          # 令牌签发者标识

@@ -3,7 +3,6 @@ package jwt
 import (
 	"context"
 	"errors"
-	"strconv"
 	"strings"
 	"time"
 
@@ -227,13 +226,9 @@ func (j *jwtPaser) Server() middleware.Middleware {
 						// 使用 ParseAccessToken 校验 Token 类型
 						claims, err := j.ParseAccessToken(tokenString)
 						if err == nil {
-							// 同时设置到 context value 和 meta 包中
-							ctx = context.WithValue(ctx, "user_id", claims.UserId)
-							ctx = context.WithValue(ctx, "user_name", claims.UserName)
-
-							// 与 pkg/meta 集成
+							// 注入用户信息到 Kratos metadata（x-md-global- 全局透传）
+							// biz 层通过 meta.GetRequestMetaData(ctx) 提取
 							reqMeta := &meta.RequestMetaData{
-								//JwtToken: tokenString,
 								Auth: meta.Auth{
 									UserID:   claims.UserId,
 									UserName: claims.UserName,
@@ -249,23 +244,23 @@ func (j *jwtPaser) Server() middleware.Middleware {
 	}
 }
 
-// Client 客户端中间件 - 用于服务间调用传递 Token
+// Client 客户端中间件 - 用于服务间调用传递用户认证信息
+//
+// 从当前上下文提取用户身份（由 Server 中间件注入到 pkg/meta），
+// 通过 Kratos metadata（x-md-global- 前缀）全链路透传到下游服务。
+// 标准化方案替代旧的 X-User-Id / X-User-Name 自定义头。
 func (j *jwtPaser) Client() middleware.Middleware {
 	return func(handler middleware.Handler) middleware.Handler {
 		return func(ctx context.Context, req interface{}) (interface{}, error) {
-			// 从 context 中获取用户信息并传递
-			if header, ok := transport.FromClientContext(ctx); ok {
-				if userId, ok := ctx.Value("user_id").(uint64); ok {
-					header.RequestHeader().Set("X-User-Id", strconv.FormatUint(userId, 10))
-				}
-				if userName, ok := ctx.Value("user_name").(string); ok {
-					header.RequestHeader().Set("X-User-Name", userName)
-				}
+			// 从 meta 包提取当前请求的用户身份（优先服务端上下文，回退客户端上下文）
+			reqMeta := meta.GetRequestMetaData(ctx)
+			if reqMeta != nil && reqMeta.Auth.UserID > 0 {
+				// 将用户身份注入到出站请求的 Kratos metadata 中（x-md-global- 前缀自动全链路透传）
+				ctx = meta.NewClientCtx(ctx, reqMeta)
 			}
 			return handler(ctx, req)
 		}
 	}
-
 }
 
 // extractToken 从 Authorization header 中提取 token

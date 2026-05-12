@@ -1,0 +1,58 @@
+# ================================
+# Ley — Blog 服务示例配置
+# ================================
+# 本地开发：将此文件复制到 ./data/blog/configs/config.yaml
+# 生产部署：通过 etcd 下发，路径 /ley/configs/blog/config.yaml
+# 启动命令：./blog -conf ./data/blog/configs
+
+# ================================
+# Bootstrap 配置（本地读取）
+# ================================
+server:
+  http:
+    network: tcp
+    addr: 0.0.0.0:8002
+    timeout: 3s
+  grpc:
+    network: tcp
+    addr: 0.0.0.0:9002
+    timeout: 3s
+
+log:
+  level: Debug
+  path: ./data/logs
+  mode: Dev
+
+etcd:
+  endpoints:
+    - 127.0.0.1:2379
+
+trace:
+  endpoint: http://127.0.0.1:4318
+
+# ================================
+# 服务专用配置（etcd 下发，本地为 fallback）
+# ================================
+data:
+  database:
+    driver: postgres
+    host: 127.0.0.1
+    port: 5432
+    database: ley
+    username: ley
+    password: ley123
+  redis:
+    host: 127.0.0.1
+    port: 6379
+    password: ""
+    db: 1                     # Blog 使用 Redis DB 1（文章/标签/分类缓存）
+
+nats:
+  addr: nats://127.0.0.1:4222
+  enable_jetstream: true      # 启用 JetStream 持久化
+
+minio:
+  endpoint: 127.0.0.1:9000
+  access_key_id: minioadmin
+  access_key_secret: minioadmin
+  bucket_name: ley-images

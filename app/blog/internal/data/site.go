@@ -18,10 +18,10 @@ import (
 
 type SiteSettingPO struct {
 	ID     uint            `gorm:"primaryKey"`
-	Config json.RawMessage `gorm:"column:config;type:jsonb;default:'{}'"`
+	Config json.RawMessage `gorm:"column:config;type:json"`
 }
 
-func (SiteSettingPO) TableName() string { return "article.site_settings" }
+func (SiteSettingPO) TableName() string { return "site_settings" }
 
 // SiteBackgroundPO — 背景图片表
 type SiteBackgroundPO struct {
@@ -32,7 +32,7 @@ type SiteBackgroundPO struct {
 	SortOrder int    `gorm:"column:sort_order;type:int;default:0"`
 }
 
-func (SiteBackgroundPO) TableName() string { return "article.site_backgrounds" }
+func (SiteBackgroundPO) TableName() string { return "site_backgrounds" }
 
 // =============================================================================
 // siteRepo — biz.SiteRepo 接口实现
@@ -70,7 +70,7 @@ func (r *siteRepo) GetConfig(ctx context.Context) (*biz.SiteSetting, error) {
 func (r *siteRepo) SaveConfig(ctx context.Context, cfg *biz.SiteSetting) error {
 	data, _ := json.Marshal(cfg)
 	result := r.data.db.WithContext(ctx).Exec(
-		`INSERT INTO "article".site_settings (id, config) VALUES (1, ?::jsonb) ON CONFLICT (id) DO UPDATE SET config = EXCLUDED.config`, data)
+		`INSERT INTO site_settings (id, config) VALUES (1, ?) ON DUPLICATE KEY UPDATE config = VALUES(config)`, data)
 	if result.Error != nil {
 		return result.Error
 	}

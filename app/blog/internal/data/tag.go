@@ -24,20 +24,20 @@ type TagPO struct {
 	ArticleCount int64  `gorm:"column:article_count;type:bigint;default:0"`
 }
 
-func (TagPO) TableName() string { return "article.tags" }
+func (TagPO) TableName() string { return "tags" }
 
 // CategoryPO — article.categories 表
 type CategoryPO struct {
 	gorm.Model
 	Name         string        `gorm:"column:name;type:varchar(64);not null"`
 	Slug         string        `gorm:"column:slug;type:varchar(64);uniqueIndex;not null"`
-	Description  string        `gorm:"column:description;type:text;default:''"`
+	Description  string        `gorm:"column:description;type:text"`
 	ParentID     *uint         `gorm:"column:parent_id;type:bigint;index"`
 	SortOrder    int           `gorm:"column:sort_order;type:int;default:0"`
 	ArticleCount int64         `gorm:"column:article_count;type:bigint;default:0"`
 }
 
-func (CategoryPO) TableName() string { return "article.categories" }
+func (CategoryPO) TableName() string { return "categories" }
 
 // =============================================================================
 // 缓存
@@ -231,7 +231,7 @@ func (r *categoryRepo) ListTree(ctx context.Context) ([]*biz.Category, error) {
 
 func (r *categoryRepo) IncrementArticleCount(ctx context.Context, id uint, delta int64) error {
 	return r.data.db.WithContext(ctx).Model(&CategoryPO{}).Where("id = ?", id).
-		UpdateColumn("article_count", gorm.Expr("GREATEST(article_count + ?, 0)", delta)).Error
+		UpdateColumn("article_count", gorm.Expr("article_count + ?", delta)).Error
 }
 
 // =============================================================================

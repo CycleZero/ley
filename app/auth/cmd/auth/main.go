@@ -47,7 +47,7 @@ func newApp(
 ) *kratos.App {
 	return kratos.New(
 		kratos.ID(id),
-		kratos.Name(Name),
+		kratos.Name(util.DisServiceName(Name)),
 		kratos.Version(Version),
 		kratos.Metadata(map[string]string{}),
 		kratos.Logger(logger),
@@ -144,7 +144,7 @@ func main() {
 	}
 
 	// 初始化Tracer
-	err = trace.InitTracer(bc.Trace.Endpoint, conf.ServiceName)
+	err = trace.InitTracer(bc.Trace.Endpoint, util.DisServiceName(conf.ServiceName))
 	if err != nil {
 		logger.Log(log.LevelError, "init tracer error", err)
 	}

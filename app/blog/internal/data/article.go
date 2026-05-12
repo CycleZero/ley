@@ -25,7 +25,7 @@ type ArticlePO struct {
 	Title        string     `gorm:"column:title;type:varchar(200);not null"`
 	Slug         string     `gorm:"column:slug;type:varchar(200);uniqueIndex:idx_articles_slug,where:deleted_at IS NULL;not null"`
 	Content      string     `gorm:"column:content;type:text;not null"`
-	Excerpt      string     `gorm:"column:excerpt;type:text;default:''"`
+	Excerpt      string     `gorm:"column:excerpt;type:text"`
 	CoverImage   string     `gorm:"column:cover_image;type:varchar(512);default:''"`
 	Status       int8       `gorm:"column:status;type:smallint;default:0"`
 	AuthorID     uint       `gorm:"column:author_id;type:bigint;not null;index:idx_articles_author,where:deleted_at IS NULL"`
@@ -34,11 +34,11 @@ type ArticlePO struct {
 	LikeCount    int64      `gorm:"column:like_count;type:bigint;default:0"`
 	CommentCount int64      `gorm:"column:comment_count;type:bigint;default:0"`
 	IsTop        bool       `gorm:"column:is_top;type:boolean;default:false"`
-	PublishedAt  *time.Time `gorm:"column:published_at;type:timestamptz"`
+	PublishedAt  *time.Time `gorm:"column:published_at"`
 	Tags         []TagPO    `gorm:"many2many:article.articles_tags;foreignKey:id;joinForeignKey:article_id;References:id;joinReferences:tag_id"`
 }
 
-func (ArticlePO) TableName() string { return "article.articles" }
+func (ArticlePO) TableName() string { return "articles" }
 
 // ArticleTagPO — article.articles_tags 中间表
 type ArticleTagPO struct {
@@ -47,16 +47,16 @@ type ArticleTagPO struct {
 	TagID     uint `gorm:"column:tag_id;type:bigint;not null"`
 }
 
-func (ArticleTagPO) TableName() string { return "article.articles_tags" }
+func (ArticleTagPO) TableName() string { return "articles_tags" }
 
 // ArticleLikePO — article.articles_likes 点赞表
 type ArticleLikePO struct {
 	gorm.Model
-	ArticleID uint `gorm:"column:article_id;type:bigint;not null"`
-	UserID    uint `gorm:"column:user_id;type:bigint;not null"`
+	ArticleID uint `gorm:"column:article_id;type:bigint;not null;uniqueIndex:idx_article_user"`
+	UserID    uint `gorm:"column:user_id;type:bigint;not null;uniqueIndex:idx_article_user"`
 }
 
-func (ArticleLikePO) TableName() string { return "article.articles_likes" }
+func (ArticleLikePO) TableName() string { return "articles_likes" }
 
 // =============================================================================
 // 缓存常量
@@ -266,8 +266,8 @@ func (r *articleRepo) List(ctx context.Context, query biz.ArticleListQuery) ([]*
 
 	// 标签 AND 过滤（HAVING COUNT 确保同时拥有所有标签）
 	if len(query.Tags) > 0 {
-		db = db.Joins("JOIN \"article\".articles_tags at2 ON at2.article_id = \"article\".articles.id").
-			Joins("JOIN \"article\".tags t ON t.id = at2.tag_id").
+		db = db.Joins("JOIN articles_tags at2 ON at2.article_id = articles.id").
+			Joins("JOIN tags t ON t.id = at2.tag_id").
 			Where("t.name IN ?", query.Tags).
 			Group("\"article\".articles.id").
 			Having("COUNT(DISTINCT t.id) = ?", len(query.Tags))
@@ -309,7 +309,7 @@ func (r *articleRepo) IncrementViewCount(ctx context.Context, id uint, delta int
 
 func (r *articleRepo) UpdateTagsArticleCount(ctx context.Context, tagIDs []uint, delta int64) error {
 	return r.data.db.WithContext(ctx).Model(&TagPO{}).Where("id IN ?", tagIDs).
-		UpdateColumn("article_count", gorm.Expr("GREATEST(article_count + ?, 0)", delta)).Error
+		UpdateColumn("article_count", gorm.Expr("article_count + ?", delta)).Error
 }
 
 // =============================================================================
@@ -349,12 +349,11 @@ func (r *articleRepo) SyncTags(ctx context.Context, articleID uint, tagIDs []uin
 // 点赞（事务保证计数一致性）
 // =============================================================================
 
-// InsertLike 点赞（事务：INSERT OR NOTHING → UPDATE like_count IF inserted）
+// InsertLike 点赞（事务：INSERT OR IGNORE → UPDATE like_count IF inserted）
 func (r *articleRepo) InsertLike(ctx context.Context, articleID, userID uint) error {
 	return r.data.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		result := tx.Exec(
-			`INSERT INTO "article".articles_likes (article_id, user_id, created_at, updated_at) VALUES (?, ?, NOW(), NOW()) ON CONFLICT (article_id, user_id) WHERE deleted_at IS NULL DO NOTHING`,
-			articleID, userID)
+		like := &ArticleLikePO{ArticleID: articleID, UserID: userID}
+		result := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(like)
 		if result.Error != nil {
 			return result.Error
 		}
@@ -376,7 +375,7 @@ func (r *articleRepo) DeleteLike(ctx context.Context, articleID, userID uint) er
 		}
 		if result.RowsAffected > 0 {
 			return tx.Model(&ArticlePO{}).Where("id = ?", articleID).
-				UpdateColumn("like_count", gorm.Expr("GREATEST(like_count - 1, 0)")).Error
+				UpdateColumn("like_count", gorm.Expr("like_count - 1")).Error
 		}
 		return nil
 	})

@@ -21,8 +21,20 @@ type Cache interface {
 	GetObject(ctx context.Context, key string, value any) error
 	// Set 设置缓存，expiration=0 表示永不过期
 	Set(ctx context.Context, key string, value any, expiration time.Duration) error
+	// SetNX 仅当键不存在时设置值，返回 true 表示设置成功
+	// 常用于分布式锁、防缓存击穿（只让一个请求回源重建）
+	SetNX(ctx context.Context, key string, value any, expiration time.Duration) (bool, error)
 	// Delete 删除缓存
 	Delete(ctx context.Context, key string) error
+	// Incr 原子自增，返回自增后的值
+	// 常用于计数器（浏览量、限流计数）
+	Incr(ctx context.Context, key string) (int64, error)
+	// Expire 设置键的过期时间
+	// 常用于刷新热点数据的 TTL
+	Expire(ctx context.Context, key string, expiration time.Duration) error
+	// MGet 批量获取缓存值
+	// 返回顺序与 keys 一致，键不存在对应位置为 nil
+	MGet(ctx context.Context, keys ...string) ([][]byte, error)
 	// Exists 判断键是否存在
 	Exists(ctx context.Context, key string) (bool, error)
 	// TTL 获取键剩余过期时间，返回-2表示键不存在，-1表示永不过期

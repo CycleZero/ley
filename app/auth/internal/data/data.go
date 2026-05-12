@@ -76,6 +76,12 @@ func ProvideTracerName() string {
 var ProviderSet = wire.NewSet(NewData, NewUserRepo, ProvideDB, ProvideCache, ProvideTracerName)
 
 // NewUserRepo 创建 UserRepo 实现（返回 biz.UserRepo 接口）。
+// 同时执行 AutoMigrate 建表。
 func NewUserRepo(d *Data) biz.UserRepo {
+	if err := d.db.AutoMigrate(&UserPO{}); err != nil {
+		d.logger.Errorf("AutoMigrate user.users 失败: %v", err)
+	} else {
+		d.logger.Info("AutoMigrate user.users 成功")
+	}
 	return &userRepo{data: d}
 }

@@ -4,15 +4,15 @@ VERSION=$(shell git describe --tags --always)
 
 ifeq ($(GOHOSTOS), windows)
 	Git_Bash="/c/Program Files/Git/bin/bash.exe"
-	INTERNAL_PROTO_FILES=$(shell $(Git_Bash) -c "cd `pwd` && find app -name *.proto -not -path '*/gateway/*'")
+	INTERNAL_PROTO_FILES=$(shell $(Git_Bash) -c "cd `pwd` && find app -name *.proto")
 	CONFIG_PROTO_FILES=$(shell $(Git_Bash) -c "cd `pwd` && find conf -name *.proto")
-	API_PROTO_FILES=$(shell $(Git_Bash) -c "cd `pwd` && find api -name *.proto -not -path '*/gateway/*'")
-	INTERNAL_CONFIG_PROTO_FILES=$(shell $(Git_Bash) -c "cd `pwd` && find app -path '*/internal/conf/*.proto' -not -path '*/gateway/*'")
+	API_PROTO_FILES=$(shell $(Git_Bash) -c "cd `pwd` && find api -name *.proto ")
+	INTERNAL_CONFIG_PROTO_FILES=$(shell $(Git_Bash) -c "cd `pwd` && find app -path '*/internal/conf/*.proto'")
 else
-	INTERNAL_PROTO_FILES=$(shell find app -name *.proto -not -path '*/gateway/*')
-	API_PROTO_FILES=$(shell find api -name *.proto -not -path '*/gateway/*')
+	INTERNAL_PROTO_FILES=$(shell find app -name *.proto)
+	API_PROTO_FILES=$(shell find api -name *.proto)
 	CONFIG_PROTO_FILES=$(shell find conf -name *.proto)
-	INTERNAL_CONFIG_PROTO_FILES=$(shell find app -path '*/internal/conf/*.proto' -not -path '*/gateway/*')
+	INTERNAL_CONFIG_PROTO_FILES=$(shell find app -path '*/internal/conf/*.proto')
 endif
 
 
@@ -81,7 +81,7 @@ api:
 .PHONY: build
 # build auth + blog services
 build:
-	mkdir -p bin/ && go build -o ./bin/auth ./app/auth/cmd/auth && go build -o ./bin/blog ./app/blog/cmd/blog
+	mkdir -p bin/ && go build -o ./bin ./app/...
 
 .PHONY: build-auth
 # build auth service only
@@ -116,7 +116,7 @@ all:
 
 
 wire:
-	wire gen $(shell find ./app -name wire.go -not -path "*/test/*" -not -path "*/gateway/*" | xargs -n1 dirname | sort -u)
+	wire gen $(shell find ./app -name wire.go -not -path "*/test/*" | xargs -n1 dirname | sort -u)
 
 wire-all: wire
 	cd app/gateway && wire gen ./cmd/gateway 2>/dev/null || true

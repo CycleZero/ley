@@ -6,5 +6,5 @@ const (
 	ServiceName      = constant.ServiceNameBlog
 	ServiceDataDir   = "./data/" + ServiceName
 	LocalConfigDir   = ServiceDataDir + "/configs"
-	RemoteConfigPath = "/ley/configs/" + ServiceName + "/config.yaml"
+	RemoteConfigPath = constant.AppName + "/configs/" + ServiceName + "/config.yaml"
 )

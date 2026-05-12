@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -22,6 +23,10 @@ const (
 	OpDelete
 	OpExists
 	OpFlush
+	OpSetNX
+	OpIncr
+	OpExpire
+	OpMGet
 )
 
 func (o CacheOp) String() string {
@@ -36,6 +41,14 @@ func (o CacheOp) String() string {
 		return "Exists"
 	case OpFlush:
 		return "Flush"
+	case OpSetNX:
+		return "SetNX"
+	case OpIncr:
+		return "Incr"
+	case OpExpire:
+		return "Expire"
+	case OpMGet:
+		return "MGet"
 	default:
 		return "Unknown"
 	}
@@ -192,6 +205,73 @@ func (c *InMemoryCache) Flush(ctx context.Context) error {
 	defer c.mu.Unlock()
 	c.store = make(map[string][]byte)
 	return nil
+}
+
+// SetNX only sets if key does not exist.
+func (c *InMemoryCache) SetNX(ctx context.Context, key string, value interface{}, expiration time.Duration) (bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.SetCalls[key]++
+	if _, ok := c.store[key]; ok {
+		return false, nil
+	}
+	switch v := value.(type) {
+	case []byte:
+		c.store[key] = v
+	case string:
+		c.store[key] = []byte(v)
+	default:
+		data, err := json.Marshal(v)
+		if err != nil {
+			return false, err
+		}
+		c.store[key] = data
+	}
+	return true, nil
+}
+
+// Incr atomically increments the key's value as an int64.
+func (c *InMemoryCache) Incr(ctx context.Context, key string) (int64, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.GetCalls[key]++
+	data, ok := c.store[key]
+	if !ok {
+		c.store[key] = []byte("1")
+		return 1, nil
+	}
+	var n int64
+	fmt.Sscanf(string(data), "%d", &n)
+	n++
+	c.store[key] = []byte(fmt.Sprintf("%d", n))
+	return n, nil
+}
+
+// Expire sets TTL on an existing key (no-op in memory).
+func (c *InMemoryCache) Expire(ctx context.Context, key string, expiration time.Duration) error {
+	c.mu.RLock()
+	_, ok := c.store[key]
+	c.mu.RUnlock()
+	if !ok {
+		return cache.ErrKeyNotFound
+	}
+	return nil
+}
+
+// MGet returns values for multiple keys.
+func (c *InMemoryCache) MGet(ctx context.Context, keys ...string) ([][]byte, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	c.GetCalls[keys[0]]++
+	result := make([][]byte, 0, len(keys))
+	for _, k := range keys {
+		if v, ok := c.store[k]; ok {
+			result = append(result, v)
+		} else {
+			result = append(result, nil)
+		}
+	}
+	return result, nil
 }
 
 // Close is a no-op.

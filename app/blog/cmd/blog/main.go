@@ -34,7 +34,7 @@ func init() {
 
 func newApp(logger log.Logger, gs *grpc.Server, hs *http.Server, rr registry.Registrar) *kratos.App {
 	return kratos.New(
-		kratos.ID(id), kratos.Name(Name), kratos.Version(Version),
+		kratos.ID(id), 		kratos.Name(util.DisServiceName(Name)), kratos.Version(Version),
 		kratos.Metadata(map[string]string{}), kratos.Logger(logger),
 		kratos.Server(gs, hs), kratos.Registrar(rr),
 	)
@@ -80,7 +80,7 @@ func main() {
 		panic(err)
 	}
 
-	_ = trace.InitTracer(bc.Trace.Endpoint, conf.ServiceName)
+	_ = trace.InitTracer(bc.Trace.Endpoint, util.DisServiceName(conf.ServiceName))
 
 	app, cleanup, err := wireApp(&bc, &serviceConf, bc.Server, serviceConf.Data, logger, etcdClient)
 	if err != nil {
