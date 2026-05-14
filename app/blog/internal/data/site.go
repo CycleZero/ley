@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"time"
 
 	"github.com/CycleZero/ley/app/blog/internal/biz"
 	"github.com/CycleZero/ley/pkg/oss"
@@ -25,11 +26,12 @@ func (SiteSettingPO) TableName() string { return "site_settings" }
 
 // SiteBackgroundPO — 背景图片表
 type SiteBackgroundPO struct {
-	ID        uint   `gorm:"primaryKey;autoIncrement"`
-	Filename  string `gorm:"column:filename;type:varchar(255);not null"`
-	URL       string `gorm:"column:url;type:varchar(1024);not null"`
-	IsActive  bool   `gorm:"column:is_active;type:boolean;default:false"`
-	SortOrder int    `gorm:"column:sort_order;type:int;default:0"`
+	ID        uint      `gorm:"primaryKey;autoIncrement"`
+	Filename  string    `gorm:"column:filename;type:varchar(255);not null"`
+	URL       string    `gorm:"column:url;type:varchar(1024);not null"`
+	IsActive  bool      `gorm:"column:is_active;type:boolean;default:false"`
+	SortOrder int       `gorm:"column:sort_order;type:int;default:0"`
+	CreatedAt time.Time `gorm:"column:created_at;autoCreateTime"`
 }
 
 func (SiteBackgroundPO) TableName() string { return "site_backgrounds" }
@@ -86,12 +88,12 @@ func (r *siteRepo) CreateBackground(ctx context.Context, bg *biz.SiteBackground,
 		return err
 	}
 	bg.URL = key
-	bg.Filename = key
-	po := &SiteBackgroundPO{Filename: bg.Filename, URL: bg.URL, IsActive: false, SortOrder: bg.SortOrder}
+	po := &SiteBackgroundPO{Filename: bg.Filename, URL: key, IsActive: false, SortOrder: bg.SortOrder}
 	if err := r.data.db.WithContext(ctx).Create(po).Error; err != nil {
 		return err
 	}
 	bg.ID = po.ID
+	bg.CreatedAt = po.CreatedAt
 	_ = r.data.cache.Delete(ctx, "site:backgrounds")
 	return nil
 }
@@ -119,7 +121,7 @@ func (r *siteRepo) ListBackgrounds(ctx context.Context) ([]*biz.SiteBackground, 
 	}
 	bgs = make([]*biz.SiteBackground, 0, len(pos))
 	for i := range pos {
-		bgs = append(bgs, &biz.SiteBackground{ID: pos[i].ID, Filename: pos[i].Filename, URL: pos[i].URL, IsActive: pos[i].IsActive, SortOrder: pos[i].SortOrder})
+		bgs = append(bgs, &biz.SiteBackground{ID: pos[i].ID, Filename: pos[i].Filename, URL: pos[i].URL, IsActive: pos[i].IsActive, SortOrder: pos[i].SortOrder, CreatedAt: pos[i].CreatedAt})
 	}
 	_ = r.data.cache.Set(ctx, "site:backgrounds", bgs, 30*60*1000*1000*1000)
 	return bgs, nil

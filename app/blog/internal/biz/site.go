@@ -16,22 +16,22 @@ import (
 // =============================================================================
 
 type SiteSetting struct {
-	SiteTitle           string         `json:"site_title"`           // 站点标题（浏览器标签页显示）
-	SiteSubtitle        string         `json:"site_subtitle"`        // 站点副标题（首页标语）
-	SiteDescription     string         `json:"site_description"`     // 站点简介（SEO description）
-	SiteLogo            string         `json:"site_logo"`            // 站点 Logo URL
-	SiteFavicon         string         `json:"site_favicon"`         // 浏览器 Favicon URL
-	SeoKeywords         string         `json:"seo_keywords"`         // SEO 关键词（meta keywords）
-	SeoDescription      string         `json:"seo_description"`      // SEO 描述（meta description，优先于 site_description）
-	SocialGithub        string         `json:"social_github"`        // GitHub 主页链接
-	SocialTwitter       string         `json:"social_twitter"`       // Twitter 主页链接
-	SocialEmail         string         `json:"social_email"`         // 联系邮箱
-	FooterText          string         `json:"footer_text"`          // 页脚文案（版权声明等）
-	ICPNumber           string         `json:"icp_number"`           // ICP 备案号
-	EnableComments      bool           `json:"enable_comments"`      // 全站评论开关
-	EnableLikes         bool           `json:"enable_likes"`         // 全站点赞开关
-	AutoApproveComments bool           `json:"auto_approve_comments"` // 评论自动审核通过（false=需管理员审核）
-	MusicPlaylist       *MusicPlaylist `json:"music_playlist,omitempty"` // 歌单
+	SiteTitle           string         `json:"site_title"`                   // 站点标题（浏览器标签页显示）
+	SiteSubtitle        string         `json:"site_subtitle"`                // 站点副标题（首页标语）
+	SiteDescription     string         `json:"site_description"`             // 站点简介（SEO description）
+	SiteLogo            string         `json:"site_logo"`                    // 站点 Logo URL
+	SiteFavicon         string         `json:"site_favicon"`                 // 浏览器 Favicon URL
+	SeoKeywords         string         `json:"seo_keywords"`                 // SEO 关键词（meta keywords）
+	SeoDescription      string         `json:"seo_description"`              // SEO 描述（meta description，优先于 site_description）
+	SocialGithub        string         `json:"social_github"`                // GitHub 主页链接
+	SocialTwitter       string         `json:"social_twitter"`               // Twitter 主页链接
+	SocialEmail         string         `json:"social_email"`                 // 联系邮箱
+	FooterText          string         `json:"footer_text"`                  // 页脚文案（版权声明等）
+	ICPNumber           string         `json:"icp_number"`                   // ICP 备案号
+	EnableComments      *bool          `json:"enable_comments,omitempty"`    // 全站评论开关
+	EnableLikes         *bool          `json:"enable_likes,omitempty"`       // 全站点赞开关
+	AutoApproveComments *bool          `json:"auto_approve_comments,omitempty"` // 评论自动审核通过（false=需管理员审核）
+	MusicPlaylist       *MusicPlaylist `json:"music_playlist,omitempty"`     // 歌单
 }
 
 // =============================================================================
@@ -246,9 +246,15 @@ func mergeConfig(old, new *SiteSetting) *SiteSetting {
 	if new.ICPNumber != "" {
 		r.ICPNumber = new.ICPNumber
 	}
-	r.EnableComments = new.EnableComments
-	r.EnableLikes = new.EnableLikes
-	r.AutoApproveComments = new.AutoApproveComments
+	if new.EnableComments != nil {
+		r.EnableComments = new.EnableComments
+	}
+	if new.EnableLikes != nil {
+		r.EnableLikes = new.EnableLikes
+	}
+	if new.AutoApproveComments != nil {
+		r.AutoApproveComments = new.AutoApproveComments
+	}
 	if new.MusicPlaylist != nil {
 		r.MusicPlaylist = new.MusicPlaylist
 	}

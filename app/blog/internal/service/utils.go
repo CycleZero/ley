@@ -21,3 +21,14 @@ func derefUint(p *uint) uint64 {
 	}
 	return uint64(*p)
 }
+
+func boolPtr(v bool) *bool {
+	return &v
+}
+
+func derefBool(p *bool) bool {
+	if p == nil {
+		return false
+	}
+	return *p
+}

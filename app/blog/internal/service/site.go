@@ -88,7 +88,9 @@ func toSiteConfig(c *biz.SiteSetting) *blogv1.SiteConfig {
 		SiteLogo: c.SiteLogo, SiteFavicon: c.SiteFavicon, SeoKeywords: c.SeoKeywords, SeoDescription: c.SeoDescription,
 		SocialGithub: c.SocialGithub, SocialTwitter: c.SocialTwitter, SocialEmail: c.SocialEmail,
 		FooterText: c.FooterText, IcpNumber: c.ICPNumber,
-		EnableComments: c.EnableComments, EnableLikes: c.EnableLikes, AutoApproveComments: c.AutoApproveComments,
+		EnableComments:      derefBool(c.EnableComments),
+		EnableLikes:         derefBool(c.EnableLikes),
+		AutoApproveComments: derefBool(c.AutoApproveComments),
 	}
 }
 
@@ -101,7 +103,9 @@ func fromSiteConfig(c *blogv1.SiteConfig) *biz.SiteSetting {
 		SiteLogo: c.SiteLogo, SiteFavicon: c.SiteFavicon, SeoKeywords: c.SeoKeywords, SeoDescription: c.SeoDescription,
 		SocialGithub: c.SocialGithub, SocialTwitter: c.SocialTwitter, SocialEmail: c.SocialEmail,
 		FooterText: c.FooterText, ICPNumber: c.IcpNumber,
-		EnableComments: c.EnableComments, EnableLikes: c.EnableLikes, AutoApproveComments: c.AutoApproveComments,
+		EnableComments:      boolPtr(c.EnableComments),
+		EnableLikes:         boolPtr(c.EnableLikes),
+		AutoApproveComments: boolPtr(c.AutoApproveComments),
 	}
 }
 

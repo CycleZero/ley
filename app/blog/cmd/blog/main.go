@@ -52,7 +52,15 @@ func main() {
 	}
 	c.Close()
 
-	l, err := locallog.NewLogger(int(bc.Log.Mode.Number()), bc.Log.Level.String(), bc.Log.Path, Name)
+	logMode := int(commonconf.LogMode_Dev.Number())
+	logLevel := commonconf.LogLevel_Debug.String()
+	logPath := "./data/logs"
+	if bc.Log != nil {
+		logMode = int(bc.Log.Mode.Number())
+		logLevel = bc.Log.Level.String()
+		logPath = bc.Log.Path
+	}
+	l, err := locallog.NewLogger(logMode, logLevel, logPath, Name)
 	if err != nil {
 		panic(err)
 	}
@@ -63,6 +71,9 @@ func main() {
 		"trace.id", tracing.TraceID(), "span.id", tracing.SpanID(),
 	)
 
+	if bc.Etcd == nil || len(bc.Etcd.Endpoints) == 0 {
+		panic("config error: etcd.endpoints is required in bootstrap config")
+	}
 	etcdClient := infra.NewEtcdClient(bc.Etcd.Endpoints)
 	defer etcdClient.Close()
 
@@ -80,7 +91,9 @@ func main() {
 		panic(err)
 	}
 
-	_ = trace.InitTracer(bc.Trace.Endpoint, util.DisServiceName(conf.ServiceName))
+	if bc.Trace != nil && bc.Trace.Endpoint != "" {
+		_ = trace.InitTracer(bc.Trace.Endpoint, util.DisServiceName(conf.ServiceName))
+	}
 
 	app, cleanup, err := wireApp(&bc, &serviceConf, bc.Server, serviceConf.Data, logger, etcdClient)
 	if err != nil {

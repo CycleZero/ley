@@ -86,15 +86,18 @@ func NewDB(
 
 func GetDsn(engine, host, port, user, password, dbname string) string {
 	dsn := ""
-	log.GetLogger().Info("引擎", zap.String("engine", engine))
+	log.GetLogger().Info("初始化数据库",
+		zap.String("engine", engine),
+		zap.String("host", host),
+		zap.String("port", port),
+		zap.String("dbname", dbname),
+	)
 	switch engine {
 	case EngineMysql:
 		dsn = user + ":" + password + "@tcp(" + host + ":" + port + ")/" + dbname + "?charset=utf8&parseTime=True&loc=Local"
-		log.GetLogger().Info("生成DSN: " + dsn)
 	case EnginePostgres:
 		//host=localhost user=gorm password=gorm dbname=gorm port=9920 sslmode=disable TimeZone=Asia/Shanghai
 		dsn = "host=" + host + " user=" + user + " password=" + password + " dbname=" + dbname + " port=" + port + " sslmode=disable TimeZone=Asia/Shanghai"
-		log.GetLogger().Info("生成DSN: " + dsn)
 	default:
 		panic("不支持的数据库引擎")
 	}

@@ -1,0 +1,26 @@
+/**
+ * 全局主样式文件
+ *
+ * 使用 Tailwind CSS v4 的 CSS-first 配置方式，通过 @import 指令导入
+ * Tailwind 的各个功能层：
+ *
+ * @tailwind base:
+ *   基础层 —— 注入 Tailwind 的 CSS Reset（Preflight），
+ *   规范化浏览器默认样式（边距、字体、颜色等），
+ *   确保不同浏览器下表现一致。
+ *
+ * @tailwind components:
+ *   组件层 —— 用于定义可复用的 UI 组件类，
+ *   可通过 @layer components { ... } 添加自定义组件样式。
+ *
+ * @tailwind utilities:
+ *   工具类层 —— 所有 Tailwind 原子化工具类（如 flex、pt-4、text-center 等），
+ *   这是使用最频繁的层级，直接在模板中使用即可。
+ *
+ * 注意：Tailwind CSS 通过 @nuxtjs/tailwindcss 模块自动集成，
+ * 此文件由模块自动扫描并处理，无需额外配置 PostCSS。
+ */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

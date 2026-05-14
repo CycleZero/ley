@@ -89,7 +89,15 @@ func main() {
 	c.Close()
 	fmt.Println("配置项", bc.String())
 	//fmt.Println()
-	l, err := locallog.NewLogger(int(bc.Log.Mode.Number()), bc.Log.Level.String(), bc.Log.Path, Name)
+	logMode := int(commonconf.LogMode_Dev.Number())
+	logLevel := commonconf.LogLevel_Debug.String()
+	logPath := "./data/logs"
+	if bc.Log != nil {
+		logMode = int(bc.Log.Mode.Number())
+		logLevel = bc.Log.Level.String()
+		logPath = bc.Log.Path
+	}
+	l, err := locallog.NewLogger(logMode, logLevel, logPath, Name)
 	if err != nil {
 		panic(err)
 	}
@@ -103,6 +111,9 @@ func main() {
 		"trace.id", tracing.TraceID(),
 		"span.id", tracing.SpanID(),
 	)
+	if bc.Etcd == nil || len(bc.Etcd.Endpoints) == 0 {
+		panic("config error: etcd.endpoints is required in bootstrap config")
+	}
 	etcdClient := infra.NewEtcdClient(bc.Etcd.Endpoints)
 	defer etcdClient.Close()
 	logger.Log(log.LevelInfo, "init logger success")
@@ -144,9 +155,11 @@ func main() {
 	}
 
 	// 初始化Tracer
-	err = trace.InitTracer(bc.Trace.Endpoint, util.DisServiceName(conf.ServiceName))
-	if err != nil {
-		logger.Log(log.LevelError, "init tracer error", err)
+	if bc.Trace != nil && bc.Trace.Endpoint != "" {
+		err = trace.InitTracer(bc.Trace.Endpoint, util.DisServiceName(conf.ServiceName))
+		if err != nil {
+			logger.Log(log.LevelError, "init tracer error", err)
+		}
 	}
 	//logger.Log(log.LevelInfo, "最终配置内容", bc.String())
 	app, cleanup, err := wireApp(
