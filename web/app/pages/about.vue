@@ -120,26 +120,14 @@ const articleStore = useArticleStore()
 const categoryStore = useCategoryStore()
 const tagStore = useTagStore()
 
-// SSR 并行获取数据
-await useAsyncData('about-page', async () => {
-  await Promise.all([
+// 即时请求：静态部署下 payload 可能是旧数据
+onMounted(() => {
+  Promise.all([
     siteStore.fetchConfig(),
     articleStore.fetchArticles({ page: 1, pageSize: 1 }),
     categoryStore.fetchCategories(),
     tagStore.fetchTags(),
-  ])
-  return true
-}, {
-  server: true,
-  lazy: false,
-})
-
-// 客户端兜底：nuxt generate 下 payload 恢复不执行副作用
-onMounted(() => {
-  if (!siteStore.config) siteStore.fetchConfig()
-  if (!articleStore.articles.length) articleStore.fetchArticles({ page: 1, pageSize: 1 })
-  if (!categoryStore.categories.length) categoryStore.fetchCategories()
-  if (!tagStore.tags.length) tagStore.fetchTags()
+  ]).catch(() => {})
 })
 
 // 计算是否有社交链接

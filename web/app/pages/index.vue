@@ -86,20 +86,9 @@
           </div>
 
           <!-- 加载中 -->
-          <div v-if="pending" class="py-16 flex flex-col items-center">
+          <div v-if="articleStore.loading" class="py-16 flex flex-col items-center">
             <WasLoading size="md" />
             <span class="mt-4 text-sm text-placeholder tracking-widest">加载中...</span>
-          </div>
-
-          <!-- 错误 -->
-          <div v-else-if="error" class="py-16 text-center">
-            <p class="text-error text-sm">{{ error }}</p>
-            <button
-              class="mt-3 text-sm text-muted hover:text-accent transition-colors"
-              @click="refresh"
-            >
-              重试
-            </button>
           </div>
 
           <!-- 文章列表 -->
@@ -226,23 +215,7 @@ const articleStore = useArticleStore()
 const categoryStore = useCategoryStore()
 const tagStore = useTagStore()
 
-// ---------- SSR 数据获取 ----------
-
-const { error, pending, refresh } = await useAsyncData('home-data', async () => {
-  // 并行获取所有数据
-  await Promise.all([
-    siteStore.fetchConfig(),
-    articleStore.fetchArticles({ page: 1, pageSize: 6 }),
-    categoryStore.fetchCategories(),
-    tagStore.fetchTags(),
-  ])
-  return true
-}, {
-  server: true,
-  lazy: false,
-})
-
-// 从 store 取数据（SSR 已填充）
+// 从 store 取数据
 const articles = computed(() => articleStore.articles)
 
 // ---------- 页面标题 ----------
@@ -251,13 +224,15 @@ useHead(() => ({
   title: siteStore.siteTitle,
 }))
 
-// ---------- 客户端兜底：nuxt generate 下 payload 恢复不执行副作用 ----------
+// ---------- 即时请求：静态部署下 payload 可能是旧数据 ----------
 
 onMounted(() => {
-  if (!siteStore.config) siteStore.fetchConfig()
-  if (!articleStore.articles.length) articleStore.fetchArticles({ page: 1, pageSize: 6 })
-  if (!categoryStore.categories.length) categoryStore.fetchCategories()
-  if (!tagStore.tags.length) tagStore.fetchTags()
+  Promise.all([
+    siteStore.fetchConfig(),
+    articleStore.fetchArticles({ page: 1, pageSize: 6 }),
+    categoryStore.fetchCategories(),
+    tagStore.fetchTags(),
+  ]).catch(() => {})
 })
 
 // ---------- 工具函数 ----------

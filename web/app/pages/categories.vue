@@ -18,7 +18,7 @@
     </FadeIn>
 
     <!-- 加载中 -->
-    <div v-if="categoryStore.loading" class="flex justify-center py-20">
+    <div v-if="categoryStore.loading && !categoryStore.categories.length" class="flex justify-center py-20">
       <WasLoading />
     </div>
 
@@ -68,19 +68,13 @@
 <script setup lang="ts">
 const categoryStore = useCategoryStore()
 
-// SSR 获取分类
-await useAsyncData('categories-page', () => categoryStore.fetchCategories(), {
-  server: true,
-  lazy: false,
-})
-
 // 页面标题
 useHead({
   title: '分类',
 })
 
-// 客户端兜底：nuxt generate 下 payload 恢复不执行副作用
+// 即时请求：静态部署下 payload 可能是旧数据
 onMounted(() => {
-  if (!categoryStore.categories.length) categoryStore.fetchCategories()
+  categoryStore.fetchCategories()
 })
 </script>

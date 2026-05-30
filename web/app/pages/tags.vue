@@ -18,7 +18,7 @@
     </FadeIn>
 
     <!-- 加载中 -->
-    <div v-if="tagStore.loading" class="flex justify-center py-20">
+    <div v-if="tagStore.loading && !tagStore.tags.length" class="flex justify-center py-20">
       <WasLoading />
     </div>
 
@@ -48,20 +48,14 @@
 <script setup lang="ts">
 const tagStore = useTagStore()
 
-// SSR 获取标签
-await useAsyncData('tags-page', () => tagStore.fetchTags(), {
-  server: true,
-  lazy: false,
-})
-
 // 页面标题
 useHead({
   title: '标签',
 })
 
-// 客户端兜底：nuxt generate 下 payload 恢复不执行副作用
+// 即时请求：静态部署下 payload 可能是旧数据
 onMounted(() => {
-  if (!tagStore.tags.length) tagStore.fetchTags()
+  tagStore.fetchTags()
 })
 
 // 根据文章数计算标签字号

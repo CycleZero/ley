@@ -28,7 +28,7 @@
     </FadeIn>
 
     <!-- 加载中 -->
-    <div v-if="pending" class="flex justify-center py-20">
+    <div v-if="articleStore.loading" class="flex justify-center py-20">
       <WasLoading />
     </div>
 
@@ -100,12 +100,6 @@ const fetchParams = computed(() => {
   return params
 })
 
-const { pending } = await useAsyncData(
-  () => `articles-list-${categoryId.value || ''}-${tagId.value || ''}-${page.value}`,
-  () => articleStore.fetchArticles(fetchParams.value),
-  { server: true, watch: [page, categoryId, tagId] },
-)
-
 const articles = computed(() => articleStore.articles)
 const totalPages = computed(() => Math.ceil(articleStore.total / pageSize.value) || 1)
 
@@ -166,15 +160,21 @@ function clearFilter() {
   navigateTo('/articles')
 }
 
-// 客户端兜底：nuxt generate 下 payload 恢复不执行副作用
+// 即时请求：静态部署下 payload 可能是旧数据
 onMounted(() => {
-  if (!articleStore.articles.length) {
+  articleStore.fetchArticles(fetchParams.value)
+})
+
+// 筛选条件变化时重置页码并重新获取
+watch([categoryId, tagId], (newVal, oldVal) => {
+  if (newVal[0] !== oldVal[0] || newVal[1] !== oldVal[1]) {
+    page.value = 1
     articleStore.fetchArticles(fetchParams.value)
   }
 })
 
-// 当筛选条件变化时，重置到第一页
-watch([categoryId, tagId], () => {
-  page.value = 1
+// 页码变化时重新获取
+watch(page, () => {
+  articleStore.fetchArticles(fetchParams.value)
 })
 </script>
