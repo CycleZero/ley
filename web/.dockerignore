@@ -1,9 +1,0 @@
-node_modules
-.output
-dist
-.env
-.env.*
-!.env.example
-*.md
-.git
-.cache
