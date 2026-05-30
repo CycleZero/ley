@@ -35,4 +35,6 @@ RUN mkdir -p /app/data && chown -R appuser:appgroup /app /app/data
 
 VOLUME /app/data
 
-CMD ["./server"]
+EXPOSE 52658
+
+CMD ["./server", "-addr", "0.0.0.0:52658"]
