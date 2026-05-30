@@ -108,7 +108,7 @@ func toArticleInfo(a *biz.Article) *blogv1.ArticleInfo {
 		Id: uint64(a.ID), Title: a.Title, Slug: a.Slug, Content: a.Content, Excerpt: a.Excerpt, CoverImage: a.CoverImage,
 		Status: articleStatusStr(a.Status), AuthorId: uint64(a.AuthorID),
 		Author: &commonv1.AuthorInfo{Id: uint64(a.AuthorID), Username: a.AuthorName, Avatar: a.AuthorAvatar},
-		CategoryId: derefUint(a.CategoryID), ViewCount: a.ViewCount, LikeCount: a.LikeCount, CommentCount: a.CommentCount,
+		CategoryId: derefUint(a.CategoryID), ViewCount: a.ViewCount, LikeCount: a.LikeCount,
 		IsTop: a.IsTop, IsLiked: a.IsLiked, CreatedAt: a.CreatedAt.Format("2006-01-02T15:04:05Z"), UpdatedAt: a.UpdatedAt.Format("2006-01-02T15:04:05Z"),
 	}
 	if a.CategoryID != nil {

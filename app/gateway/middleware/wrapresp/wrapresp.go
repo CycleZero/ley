@@ -2,6 +2,7 @@ package wrapresp
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -60,6 +61,8 @@ func Middleware(c *config.Middleware) (middleware.Middleware, error) {
 
 			// Check content type - only wrap JSON responses
 			contentType := resp.Header.Get("Content-Type")
+			fmt.Println("contenttype", contentType)
+
 			if contentType != "" && !isJSONContentType(contentType) {
 				return resp, nil
 			}

@@ -19,7 +19,6 @@ func ProvideEventBus(logger log.Logger, sc *conf.Config) eventbus.EventBus {
 
 var ProviderSet = wire.NewSet(
 	NewArticleUseCase,
-	NewCommentUseCase,
 	NewTagUseCase,
 	NewCategoryUseCase,
 	NewFileUseCase,

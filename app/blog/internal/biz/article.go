@@ -60,7 +60,6 @@ type Article struct {
 	Tags           []*Tag         // 标签列表
 	ViewCount      int64          // 浏览数
 	LikeCount      int64          // 点赞数
-	CommentCount   int64          // 评论数
 	IsTop          bool           // 是否置顶
 	IsLiked        bool           // 当前用户是否已点赞 (运行时计算)
 	PublishedAt    *time.Time     // 首次发布时间
@@ -1223,8 +1222,6 @@ const (
 	TopicArticleDeleted   = "article.deleted"   // 文章删除事件
 	TopicArticleViewed    = "article.viewed"    // 文章浏览事件
 	TopicArticleLiked     = "article.liked"     // 文章点赞事件
-	TopicCommentCreated   = "comment.created"   // 评论创建事件
-	TopicCommentApproved  = "comment.approved"  // 评论审核通过事件
 )
 
 // ArticleUpdatedEvent 文章更新事件
@@ -1262,19 +1259,4 @@ type ArticleLikedEvent struct {
 	UserID    uint64 `json:"user_id"`
 }
 
-// CommentCreatedEvent 评论创建事件
-// 消费者: Notification 服务 → 通知文章作者"有新评论"、通知被回复者"有回复"
-type CommentCreatedEvent struct {
-	CommentID uint64  `json:"comment_id"`
-	ArticleID uint64  `json:"article_id"`
-	AuthorID  uint64  `json:"author_id"`
-	ParentID  *uint64 `json:"parent_id,omitempty"` // 非 nil 表示回复
-}
 
-// CommentApprovedEvent 评论审核通过事件
-// 消费者: Notification 服务 → 通知评论作者"评论已通过"
-type CommentApprovedEvent struct {
-	CommentID uint64 `json:"comment_id"`
-	ArticleID uint64 `json:"article_id"`
-	AuthorID  uint64 `json:"author_id"`
-}

@@ -94,7 +94,6 @@ func ProvideRegistrar(etcdClient *clientv3.Client) registry.Registrar {
 var ProviderSet = wire.NewSet(
 	NewData,
 	NewArticleRepo,
-	NewCommentRepo,
 	NewTagRepo,
 	NewCategoryRepo,
 	NewFileRepo,
@@ -109,12 +108,6 @@ var ProviderSet = wire.NewSet(
 func NewArticleRepo(d *Data) biz.ArticleRepo {
 	d.db.AutoMigrate(&ArticlePO{}, &ArticleTagPO{}, &ArticleLikePO{})
 	return &articleRepo{data: d}
-}
-
-// NewCommentRepo 创建 CommentRepo 实现。
-func NewCommentRepo(d *Data) biz.CommentRepo {
-	d.db.AutoMigrate(&CommentPO{})
-	return &commentRepo{data: d}
 }
 
 // NewTagRepo 创建 TagRepo 实现。

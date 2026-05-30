@@ -32,10 +32,9 @@ type ArticlePO struct {
 	CategoryID   *uint      `gorm:"column:category_id;type:bigint;index:idx_articles_category,where:deleted_at IS NULL"`
 	ViewCount    int64      `gorm:"column:view_count;type:bigint;default:0"`
 	LikeCount    int64      `gorm:"column:like_count;type:bigint;default:0"`
-	CommentCount int64      `gorm:"column:comment_count;type:bigint;default:0"`
 	IsTop        bool       `gorm:"column:is_top;type:boolean;default:false"`
 	PublishedAt  *time.Time `gorm:"column:published_at"`
-	Tags         []TagPO    `gorm:"many2many:article.articles_tags;foreignKey:id;joinForeignKey:article_id;References:id;joinReferences:tag_id"`
+	Tags         []TagPO    `gorm:"many2many:articles_tags;foreignKey:id;joinForeignKey:article_id;References:id;joinReferences:tag_id"`
 }
 
 func (ArticlePO) TableName() string { return "articles" }
@@ -412,7 +411,7 @@ func articlePOToBiz(po *ArticlePO) *biz.Article {
 		ID: po.ID, Title: po.Title, Slug: po.Slug, Content: po.Content,
 		Excerpt: po.Excerpt, CoverImage: po.CoverImage, Status: biz.ArticleStatus(po.Status),
 		AuthorID: po.AuthorID, CategoryID: po.CategoryID, ViewCount: po.ViewCount,
-		LikeCount: po.LikeCount, CommentCount: po.CommentCount, IsTop: po.IsTop,
+		LikeCount: po.LikeCount, IsTop: po.IsTop,
 		PublishedAt: po.PublishedAt, CreatedAt: po.CreatedAt, UpdatedAt: po.UpdatedAt,
 	}
 	if len(po.Tags) > 0 {

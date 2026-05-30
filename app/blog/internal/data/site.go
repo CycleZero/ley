@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // =============================================================================
@@ -70,11 +71,14 @@ func (r *siteRepo) GetConfig(ctx context.Context) (*biz.SiteSetting, error) {
 
 // SaveConfig 保存站点配置。合并策略由 biz 层实现，data 层仅负责持久化。
 func (r *siteRepo) SaveConfig(ctx context.Context, cfg *biz.SiteSetting) error {
-	data, _ := json.Marshal(cfg)
-	result := r.data.db.WithContext(ctx).Exec(
-		`INSERT INTO site_settings (id, config) VALUES (1, ?) ON DUPLICATE KEY UPDATE config = VALUES(config)`, data)
-	if result.Error != nil {
-		return result.Error
+	raw, _ := json.Marshal(cfg)
+	po := &SiteSettingPO{ID: 1, Config: raw}
+	err := r.data.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"config"}),
+	}).Create(po).Error
+	if err != nil {
+		return err
 	}
 	// 删除缓存
 	_ = r.data.cache.Delete(ctx, "site:config")
@@ -129,7 +133,7 @@ func (r *siteRepo) ListBackgrounds(ctx context.Context) ([]*biz.SiteBackground, 
 
 // SetActiveBackground 激活背景图（事务：取消所有 → 激活目标）。
 func (r *siteRepo) SetActiveBackground(ctx context.Context, id uint) error {
-	return r.data.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	err := r.data.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		tx.Model(&SiteBackgroundPO{}).Where("is_active = true").Update("is_active", false)
 		result := tx.Model(&SiteBackgroundPO{}).Where("id = ?", id).Update("is_active", true)
 		if result.RowsAffected == 0 {
@@ -137,4 +141,8 @@ func (r *siteRepo) SetActiveBackground(ctx context.Context, id uint) error {
 		}
 		return result.Error
 	})
+	if err == nil {
+		_ = r.data.cache.Delete(ctx, "site:backgrounds")
+	}
+	return err
 }

@@ -66,32 +66,6 @@ service ArticleService {
   }
 }
 
-service CommentService {
-  rpc CreateComment(CreateCommentRequest) returns (CreateCommentReply) {
-    option (google.api.http) = { post: "/api/v1/articles/{article_id}/comments" body: "*" };
-    option (openapi.v3.operation) = { summary: "发表评论" description: "对文章发表顶级评论或回复，嵌套深度不超过5层" tags: "评论" };
-  }
-  rpc UpdateComment(UpdateCommentRequest) returns (UpdateCommentReply) {
-    option (google.api.http) = { put: "/api/v1/comments/{id}" body: "*" };
-    option (openapi.v3.operation) = { summary: "编辑评论" description: "编辑自己发表的评论内容" tags: "评论" };
-  }
-  rpc DeleteComment(DeleteCommentRequest) returns (DeleteCommentReply) {
-    option (google.api.http) = { delete: "/api/v1/comments/{id}" };
-    option (openapi.v3.operation) = { summary: "删除评论" description: "软删除自己发表的评论" tags: "评论" };
-  }
-  rpc ListComments(ListCommentsRequest) returns (ListCommentsReply) {
-    option (google.api.http) = { get: "/api/v1/articles/{article_id}/comments" };
-    option (openapi.v3.operation) = { summary: "评论列表" description: "获取文章的评论列表（树形结构）" tags: "评论" };
-  }
-  rpc ApproveComment(ApproveCommentRequest) returns (ApproveCommentReply) {
-    option (google.api.http) = { post: "/api/v1/comments/{id}/approve" body: "*" };
-    option (openapi.v3.operation) = { summary: "审核通过评论" description: "管理员将评论设为已通过审核状态" tags: "评论" };
-  }
-  rpc MarkCommentSpam(MarkCommentSpamRequest) returns (MarkCommentSpamReply) {
-    option (google.api.http) = { post: "/api/v1/comments/{id}/spam" body: "*" };
-    option (openapi.v3.operation) = { summary: "标记垃圾评论" description: "管理员将评论标记为垃圾" tags: "评论" };
-  }
-}
 
 service TagService {
   rpc CreateTag(CreateTagRequest) returns (CreateTagReply) {
@@ -210,18 +184,6 @@ message LikeArticleReply {}
 message UnlikeArticleRequest { uint64 id = 1; }
 message UnlikeArticleReply {}
 
-message CreateCommentRequest { uint64 article_id = 1; uint64 parent_id = 2; string content = 3; }
-message CreateCommentReply { CommentInfo comment = 1; }
-message UpdateCommentRequest { uint64 id = 1; string content = 2; }
-message UpdateCommentReply { CommentInfo comment = 1; }
-message DeleteCommentRequest { uint64 id = 1; }
-message DeleteCommentReply {}
-message ListCommentsRequest { uint64 article_id = 1; int32 page = 2; int32 page_size = 3; }
-message ListCommentsReply { repeated CommentNode comments = 1; int64 total = 2; }
-message ApproveCommentRequest { uint64 id = 1; }
-message ApproveCommentReply {}
-message MarkCommentSpamRequest { uint64 id = 1; }
-message MarkCommentSpamReply {}
 
 message CreateTagRequest { string name = 1; }
 message CreateTagReply { TagInfo tag = 1; }
@@ -282,29 +244,12 @@ message ArticleInfo {
   repeated TagInfo tags = 12;
   int64 view_count = 13;
   int64 like_count = 14;
-  int64 comment_count = 15;
   bool is_top = 16;
   bool is_liked = 17;
   string published_at = 18;
   string created_at = 19;
   string updated_at = 20;
 }
-
-message CommentInfo {
-  uint64 id = 1;
-  uint64 article_id = 2;
-  uint64 author_id = 3;
-  string author_name = 4;
-  string author_avatar = 5;
-  uint64 parent_id = 6;
-  int32 depth = 7;
-  string content = 8;
-  string status = 9;
-  string created_at = 10;
-  string updated_at = 11;
-}
-
-message CommentNode { CommentInfo comment = 1; repeated CommentNode children = 2; }
 
 message TagInfo { uint64 id = 1; string name = 2; string slug = 3; int64 article_count = 4; }
 
@@ -334,9 +279,7 @@ message SiteConfig {
   string social_email = 10;         // 联系邮箱
   string footer_text = 11;          // 页脚文案（版权声明等）
   string icp_number = 12;           // ICP 备案号
-  bool enable_comments = 13;        // 全站评论开关
   bool enable_likes = 14;           // 全站点赞开关
-  bool auto_approve_comments = 15;  // 评论自动审核通过（false=需管理员审核）
 }
 
 message SiteBackground { uint64 id = 1; string filename = 2; string url = 3; bool is_active = 4; int32 sort_order = 5; string created_at = 6; }

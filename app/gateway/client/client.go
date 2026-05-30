@@ -46,9 +46,10 @@ func (c *client) RoundTrip(req *http.Request) (resp *http.Response, err error) {
 	backendNode := n.(*node)
 	req.URL.Host = addr
 	req.URL.Scheme = "http"
+	req.Host = addr
 	if backendNode.tls {
 		req.URL.Scheme = "https"
-		req.Host = addr
+		//req.Host = addr
 	}
 	if nodeHost := n.Metadata()["host"]; nodeHost != "" {
 		req.Host = nodeHost

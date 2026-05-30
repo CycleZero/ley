@@ -37,6 +37,9 @@ bin/
 .idea/
 *.swp
 
+# Personal workspace
+.omo/
+
 config.yaml
 /data/*/configs/*.yaml
 /data/*/logs

@@ -4,7 +4,6 @@ const AppName = "ley"
 
 const DataDir = "./data"
 const (
-	ServiceNameComment    = "comment"
 	ServiceNameUser       = "user"
 	ServiceNamePost       = "post"
 	ServiceNameFile       = "file"

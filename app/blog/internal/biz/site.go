@@ -28,9 +28,7 @@ type SiteSetting struct {
 	SocialEmail         string         `json:"social_email"`                 // 联系邮箱
 	FooterText          string         `json:"footer_text"`                  // 页脚文案（版权声明等）
 	ICPNumber           string         `json:"icp_number"`                   // ICP 备案号
-	EnableComments      *bool          `json:"enable_comments,omitempty"`    // 全站评论开关
 	EnableLikes         *bool          `json:"enable_likes,omitempty"`       // 全站点赞开关
-	AutoApproveComments *bool          `json:"auto_approve_comments,omitempty"` // 评论自动审核通过（false=需管理员审核）
 	MusicPlaylist       *MusicPlaylist `json:"music_playlist,omitempty"`     // 歌单
 }
 
@@ -246,14 +244,8 @@ func mergeConfig(old, new *SiteSetting) *SiteSetting {
 	if new.ICPNumber != "" {
 		r.ICPNumber = new.ICPNumber
 	}
-	if new.EnableComments != nil {
-		r.EnableComments = new.EnableComments
-	}
 	if new.EnableLikes != nil {
 		r.EnableLikes = new.EnableLikes
-	}
-	if new.AutoApproveComments != nil {
-		r.AutoApproveComments = new.AutoApproveComments
 	}
 	if new.MusicPlaylist != nil {
 		r.MusicPlaylist = new.MusicPlaylist

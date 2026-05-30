@@ -20,6 +20,7 @@ import (
 	_ "net/http/pprof"
 
 	_ "github.com/CycleZero/ley/app/gateway/discovery/consul"
+	_ "github.com/CycleZero/ley/app/gateway/discovery/etcd"
 	_ "github.com/CycleZero/ley/app/gateway/middleware/bbr"
 	"github.com/CycleZero/ley/app/gateway/middleware/circuitbreaker"
 	_ "github.com/CycleZero/ley/app/gateway/middleware/cors"
@@ -30,6 +31,7 @@ import (
 	_ "github.com/CycleZero/ley/app/gateway/middleware/streamrecorder"
 	_ "github.com/CycleZero/ley/app/gateway/middleware/tracing"
 	_ "github.com/CycleZero/ley/app/gateway/middleware/transcoder"
+	_ "github.com/CycleZero/ley/app/gateway/middleware/wrapresp"
 	_ "go.uber.org/automaxprocs"
 
 	"github.com/go-kratos/kratos/v2"
