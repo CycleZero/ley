@@ -28,11 +28,11 @@ COPY --from=builder /app/server /app/server
 RUN groupadd -g 1000 appgroup && \
     useradd -u 1000 -g appgroup -m appuser
 
-USER appuser
-
 WORKDIR /app
 
 RUN mkdir -p /app/data && chown -R appuser:appgroup /app /app/data
+
+USER appuser
 
 VOLUME /app/data
 
