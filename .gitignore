@@ -48,3 +48,5 @@ config.yaml
 *.pb.go
 
 openapi.yaml
+
+.claude
