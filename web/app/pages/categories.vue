@@ -78,4 +78,9 @@ await useAsyncData('categories-page', () => categoryStore.fetchCategories(), {
 useHead({
   title: '分类',
 })
+
+// 客户端兜底：nuxt generate 下 payload 恢复不执行副作用
+onMounted(() => {
+  if (!categoryStore.categories.length) categoryStore.fetchCategories()
+})
 </script>

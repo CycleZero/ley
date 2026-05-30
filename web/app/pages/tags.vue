@@ -59,6 +59,11 @@ useHead({
   title: '标签',
 })
 
+// 客户端兜底：nuxt generate 下 payload 恢复不执行副作用
+onMounted(() => {
+  if (!tagStore.tags.length) tagStore.fetchTags()
+})
+
 // 根据文章数计算标签字号
 function tagSize(count: string): string {
   const c = Number(count)

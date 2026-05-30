@@ -166,6 +166,13 @@ function clearFilter() {
   navigateTo('/articles')
 }
 
+// 客户端兜底：nuxt generate 下 payload 恢复不执行副作用
+onMounted(() => {
+  if (!articleStore.articles.length) {
+    articleStore.fetchArticles(fetchParams.value)
+  }
+})
+
 // 当筛选条件变化时，重置到第一页
 watch([categoryId, tagId], () => {
   page.value = 1

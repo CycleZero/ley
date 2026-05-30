@@ -89,6 +89,7 @@ func toSiteConfig(c *biz.SiteSetting) *blogv1.SiteConfig {
 		SocialGithub: c.SocialGithub, SocialTwitter: c.SocialTwitter, SocialEmail: c.SocialEmail,
 		FooterText: c.FooterText, IcpNumber: c.ICPNumber,
 		EnableLikes: derefBool(c.EnableLikes),
+		MusicPlaylist: toMusicPlaylist(c.MusicPlaylist),
 	}
 }
 
@@ -102,6 +103,7 @@ func fromSiteConfig(c *blogv1.SiteConfig) *biz.SiteSetting {
 		SocialGithub: c.SocialGithub, SocialTwitter: c.SocialTwitter, SocialEmail: c.SocialEmail,
 		FooterText: c.FooterText, ICPNumber: c.IcpNumber,
 		EnableLikes: boolPtr(c.EnableLikes),
+		MusicPlaylist: fromMusicPlaylist(c.MusicPlaylist),
 	}
 }
 

@@ -1,32 +1,41 @@
 /**
  * 认证状态管理
  *
- * 包含：用户信息、Token 管理、登录/注册/登出/刷新。
- * 认证相关 API 直接内联调用 $fetch，避免与 useApiClient 形成循环依赖。
+ * 关键设计：Token 存储在 cookie 中，Pinia 只存 user 和内存中的 token ref。
+ * 避免 Pinia hydration 序列化覆盖 cookie：
+ *   - login/logout/refresh 时手动写 cookie
+ *   - init() 时手动读 cookie，不从 Pinia state 恢复 token
  */
 export const useAuthStore = defineStore('auth', () => {
   const config = useRuntimeConfig()
   const ui = useUiStore()
 
+  // ---------- Cookie 读写工具（隔离在 Pinia 外部逻辑） ----------
+
+  const _atCookie = useCookie<string | null>('ley_at', { default: () => null })
+  const _rtCookie = useCookie<string | null>('ley_rt', { default: () => null })
+
+  function readTokenFromCookie(): string | null {
+    // 直接读 cookie，绕过 Pinia state
+    return _atCookie.value
+  }
+
+  function readRefreshFromCookie(): string | null {
+    return _rtCookie.value
+  }
+
+  function writeTokens(at: string | null, rt: string | null) {
+    _atCookie.value = at
+    _rtCookie.value = rt
+  }
+
   // ---------- State ----------
-
-  /** 访问令牌（15 分钟有效） */
-  const accessToken = useCookie<string | null>('ley_at', {
-    default: () => null,
-    maxAge: 15 * 60, // 15 分钟
-  })
-
-  /** 刷新令牌（7 天有效） */
-  const refreshToken = useCookie<string | null>('ley_rt', {
-    default: () => null,
-    maxAge: 7 * 24 * 60 * 60, // 7 天
-  })
 
   /** 当前用户信息 */
   const user = ref<UserInfo | null>(null)
 
-  /** 是否已登录 */
-  const isLoggedIn = computed(() => !!accessToken.value && !!user.value)
+  /** 是否已登录（以 cookie 为准，避免 Pinia state 干扰） */
+  const isLoggedIn = computed(() => !!readTokenFromCookie() && !!user.value)
 
   /** 是否为管理员 */
   const isAdmin = computed(() => user.value?.role === 'admin')
@@ -35,7 +44,6 @@ export const useAuthStore = defineStore('auth', () => {
 
   /**
    * 登录
-   * 成功后自动设置 Token 和用户信息
    */
   async function login(data: LoginRequest) {
     const res = await $fetch<GatewayResponse<LoginReply>>(`${config.public.apiBase}/api/v1/auth/login`, {
@@ -43,8 +51,7 @@ export const useAuthStore = defineStore('auth', () => {
       body: data,
     })
     const payload = unwrap(res)
-    accessToken.value = payload.tokenPair.accessToken
-    refreshToken.value = payload.tokenPair.refreshToken
+    writeTokens(payload.tokenPair.accessToken, payload.tokenPair.refreshToken)
     user.value = payload.user
     ui.toast('登录成功', 'success')
     return payload
@@ -52,7 +59,6 @@ export const useAuthStore = defineStore('auth', () => {
 
   /**
    * 注册
-   * 成功后自动登录
    */
   async function register(data: RegisterRequest) {
     const res = await $fetch<GatewayResponse<RegisterReply>>(`${config.public.apiBase}/api/v1/auth/register`, {
@@ -60,8 +66,7 @@ export const useAuthStore = defineStore('auth', () => {
       body: data,
     })
     const payload = unwrap(res)
-    accessToken.value = payload.tokenPair.accessToken
-    refreshToken.value = payload.tokenPair.refreshToken
+    writeTokens(payload.tokenPair.accessToken, payload.tokenPair.refreshToken)
     user.value = payload.user
     ui.toast('注册成功', 'success')
     return payload
@@ -69,40 +74,35 @@ export const useAuthStore = defineStore('auth', () => {
 
   /**
    * 刷新 Token
-   * 被 useApiClient 拦截器调用，也支持手动调用
    */
   async function refresh() {
-    if (!refreshToken.value) {
+    const rt = readRefreshFromCookie()
+    if (!rt) {
       throw new Error('无刷新令牌')
     }
     const res = await $fetch<GatewayResponse<RefreshTokenReply>>(`${config.public.apiBase}/api/v1/auth/refresh`, {
       method: 'POST',
-      body: { refreshToken: refreshToken.value } satisfies RefreshTokenRequest,
+      body: { refreshToken: rt } satisfies RefreshTokenRequest,
     })
     const payload = unwrap(res)
-    accessToken.value = payload.tokenPair.accessToken
-    refreshToken.value = payload.tokenPair.refreshToken
+    writeTokens(payload.tokenPair.accessToken, payload.tokenPair.refreshToken)
     user.value = payload.user
     return payload
   }
 
   /**
    * 登出
-   * 将当前 Token 加入后端黑名单，并清空本地状态
    */
   async function logout() {
-    if (accessToken.value && refreshToken.value) {
+    const at = readTokenFromCookie()
+    const rt = readRefreshFromCookie()
+    if (at && rt) {
       await $fetch<GatewayResponse<LogoutReply>>(`${config.public.apiBase}/api/v1/auth/logout`, {
         method: 'POST',
-        body: {
-          refreshToken: refreshToken.value,
-        } satisfies LogoutRequest,
-      }).catch(() => {
-        // 忽略网络错误，强制清空本地状态
-      })
+        body: { refreshToken: rt } satisfies LogoutRequest,
+      }).catch(() => {})
     }
-    accessToken.value = null
-    refreshToken.value = null
+    writeTokens(null, null)
     user.value = null
     ui.toast('已登出', 'info')
   }
@@ -111,10 +111,12 @@ export const useAuthStore = defineStore('auth', () => {
    * 获取当前用户资料
    */
   async function fetchProfile() {
+    const at = readTokenFromCookie()
+    if (!at) throw new Error('无访问令牌')
     const res = await $fetch<GatewayResponse<GetProfileReply>>(`${config.public.apiBase}/api/v1/users/me`, {
       method: 'GET',
       headers: {
-        Authorization: `Bearer ${accessToken.value}`,
+        Authorization: `Bearer ${at}`,
       },
     })
     const payload = unwrap(res)
@@ -126,10 +128,12 @@ export const useAuthStore = defineStore('auth', () => {
    * 更新用户资料
    */
   async function updateProfile(data: UpdateProfileRequest) {
+    const at = readTokenFromCookie()
+    if (!at) throw new Error('无访问令牌')
     const res = await $fetch<GatewayResponse<UpdateProfileReply>>(`${config.public.apiBase}/api/v1/users/me`, {
       method: 'PUT',
       headers: {
-        Authorization: `Bearer ${accessToken.value}`,
+        Authorization: `Bearer ${at}`,
       },
       body: data,
     })
@@ -140,40 +144,39 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   /**
-   * 初始化：如果有 Token，尝试恢复登录态
-   * 仅在明确收到 401 时才尝试刷新，其他错误（网络不通等）保留现有状态
+   * 初始化：从 cookie 读取 token，尝试恢复登录态
    */
   async function init() {
-    if (!accessToken.value || user.value) return
+    if (user.value) return
 
-    try {
-      await fetchProfile()
-    }
-    catch (e: any) {
-      // 只有 401 才认为 Token 过期，尝试刷新
-      const status = e?.statusCode || e?.response?.status || e?.status
-      if (status === 401) {
-        if (refreshToken.value) {
-          try {
-            await refresh()
-          }
-          catch {
-            logout()
-          }
-        }
-        else {
-          logout()
-        }
+    const at = readTokenFromCookie()
+    if (at) {
+      try {
+        await fetchProfile()
+        return
       }
-      // 其他错误（网络不通、502、404 等）不处理，保留现有 cookie
-      // 用户刷新页面时会再次尝试
+      catch (e: any) {
+        const status = e?.statusCode || e?.response?.status || e?.status
+        if (status !== 401) {
+          return
+        }
+        // 401 时尝试刷新
+      }
+    }
+
+    const rt = readRefreshFromCookie()
+    if (rt) {
+      try {
+        await refresh()
+      }
+      catch {
+        logout()
+      }
     }
   }
 
   return {
     // State
-    accessToken,
-    refreshToken,
     user,
     isLoggedIn,
     isAdmin,
@@ -185,6 +188,9 @@ export const useAuthStore = defineStore('auth', () => {
     fetchProfile,
     updateProfile,
     init,
+    // 供外部读取 token（从 cookie，非 Pinia state）
+    get accessToken() { return readTokenFromCookie() },
+    get refreshToken() { return readRefreshFromCookie() },
   }
 })
 

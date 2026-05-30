@@ -251,6 +251,15 @@ useHead(() => ({
   title: siteStore.siteTitle,
 }))
 
+// ---------- 客户端兜底：nuxt generate 下 payload 恢复不执行副作用 ----------
+
+onMounted(() => {
+  if (!siteStore.config) siteStore.fetchConfig()
+  if (!articleStore.articles.length) articleStore.fetchArticles({ page: 1, pageSize: 6 })
+  if (!categoryStore.categories.length) categoryStore.fetchCategories()
+  if (!tagStore.tags.length) tagStore.fetchTags()
+})
+
 // ---------- 工具函数 ----------
 
 function formatDate(date: string) {

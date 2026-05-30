@@ -134,6 +134,14 @@ await useAsyncData('about-page', async () => {
   lazy: false,
 })
 
+// 客户端兜底：nuxt generate 下 payload 恢复不执行副作用
+onMounted(() => {
+  if (!siteStore.config) siteStore.fetchConfig()
+  if (!articleStore.articles.length) articleStore.fetchArticles({ page: 1, pageSize: 1 })
+  if (!categoryStore.categories.length) categoryStore.fetchCategories()
+  if (!tagStore.tags.length) tagStore.fetchTags()
+})
+
 // 计算是否有社交链接
 const hasSocialLinks = computed(() => {
   const c = siteStore.config

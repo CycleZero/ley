@@ -132,14 +132,27 @@ const ui = useUiStore()
 // 从路由获取 slug
 const slug = computed(() => route.params.slug as string)
 
-// 加载文章
-const { pending } = await useAsyncData(
+// 加载文章（useAsyncData 数据用于显示；payload 恢复时副作用不执行，需手动同步到 store）
+const { pending, data: articleData } = await useAsyncData(
   `article-${slug.value}`,
   () => articleStore.fetchArticle(slug.value),
   { server: true },
 )
 
-const article = computed(() => articleStore.currentArticle)
+// 优先使用 useAsyncData 返回的数据（payload 恢复时可用）
+// fallback 到 Pinia store（直接访问时 hydration 恢复）
+const article = computed(() => articleData.value?.article || articleStore.currentArticle)
+
+// 同步到 store，确保 toggleLike 等操作使用 store 中的 currentArticle
+// 兜底：nuxt generate 下客户端导航时 payload 恢复可能失败，需手动获取
+onMounted(() => {
+  if (articleData.value?.article) {
+    articleStore.currentArticle = articleData.value.article
+  }
+  if (!article.value) {
+    articleStore.fetchArticle(slug.value)
+  }
+})
 
 // 阅读时长估算（中文字数 / 500）
 const readingTime = computed(() => {

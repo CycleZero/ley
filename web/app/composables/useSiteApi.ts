@@ -17,7 +17,7 @@ export function useSiteApi() {
     updateConfig: async (data: SiteConfig) => {
       const res = await client<GatewayResponse<UpdateSiteConfigReply>>('/api/v1/site/config', {
         method: 'PUT',
-        body: { config: data },
+        body: data,
       })
       return unwrap(res)
     },
@@ -68,7 +68,7 @@ export function useSiteApi() {
     updatePlaylist: async (data: MusicPlaylist) => {
       const res = await client<GatewayResponse<UpdateMusicPlaylistReply>>('/api/v1/site/music/playlist', {
         method: 'PUT',
-        body: { playlist: data },
+        body: data,
       })
       return unwrap(res)
     },
