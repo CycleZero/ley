@@ -111,7 +111,7 @@ export const useAuthStore = defineStore('auth', () => {
    * 获取当前用户资料
    */
   async function fetchProfile() {
-    const res = await $fetch<GatewayResponse<GetProfileReply>>(`${config.public.apiBase}/api/v1/auth/profile`, {
+    const res = await $fetch<GatewayResponse<GetProfileReply>>(`${config.public.apiBase}/api/v1/users/me`, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${accessToken.value}`,
@@ -126,7 +126,7 @@ export const useAuthStore = defineStore('auth', () => {
    * 更新用户资料
    */
   async function updateProfile(data: UpdateProfileRequest) {
-    const res = await $fetch<GatewayResponse<UpdateProfileReply>>(`${config.public.apiBase}/api/v1/auth/profile`, {
+    const res = await $fetch<GatewayResponse<UpdateProfileReply>>(`${config.public.apiBase}/api/v1/users/me`, {
       method: 'PUT',
       headers: {
         Authorization: `Bearer ${accessToken.value}`,
@@ -141,15 +141,18 @@ export const useAuthStore = defineStore('auth', () => {
 
   /**
    * 初始化：如果有 Token，尝试恢复登录态
-   * 通常在 app.vue 的 onMounted 中调用
+   * 仅在明确收到 401 时才尝试刷新，其他错误（网络不通等）保留现有状态
    */
   async function init() {
-    if (accessToken.value && !user.value) {
-      try {
-        await fetchProfile()
-      }
-      catch {
-        // 获取资料失败，Token 可能已过期，尝试刷新
+    if (!accessToken.value || user.value) return
+
+    try {
+      await fetchProfile()
+    }
+    catch (e: any) {
+      // 只有 401 才认为 Token 过期，尝试刷新
+      const status = e?.statusCode || e?.response?.status || e?.status
+      if (status === 401) {
         if (refreshToken.value) {
           try {
             await refresh()
@@ -162,6 +165,8 @@ export const useAuthStore = defineStore('auth', () => {
           logout()
         }
       }
+      // 其他错误（网络不通、502、404 等）不处理，保留现有 cookie
+      // 用户刷新页面时会再次尝试
     }
   }
 

@@ -30,7 +30,7 @@
           :to="item.to"
           class="flex items-center gap-3 px-3 py-2.5 text-sm rounded-sm transition-colors"
           :class="[
-            route.path === item.to || route.path.startsWith(item.to + '/')
+            isActiveNav(item.to)
               ? 'bg-surface-hover text-heading font-medium'
               : 'text-muted hover:bg-surface hover:text-body',
           ]"
@@ -111,7 +111,7 @@
             :to="item.to"
             class="flex items-center gap-3 px-3 py-2.5 text-sm rounded-sm transition-colors"
             :class="[
-              route.path === item.to || route.path.startsWith(item.to + '/')
+              isActiveNav(item.to)
                 ? 'bg-surface-hover text-heading font-medium'
                 : 'text-muted hover:bg-surface hover:text-body',
             ]"
@@ -149,6 +149,14 @@
 <script setup lang="ts">
 const route = useRoute()
 
+// 导航项激活判断（/admin 根路径只精确匹配，避免子页面也高亮）
+function isActiveNav(to: string) {
+  if (to === '/admin') {
+    return route.path === '/admin'
+  }
+  return route.path === to || route.path.startsWith(to + '/')
+}
+
 // 移动端菜单状态
 const mobileMenuOpen = ref(false)
 
@@ -164,11 +172,7 @@ const adminNavItems = [
     to: '/admin/articles',
     icon: 'M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1m2 13a2 2 0 01-2-2V7m2 13a2 2 0 002-2V9a2 2 0 00-2-2h-2m-4-3H9M7 16h6M7 8h6v4H7V8z',
   },
-  {
-    label: '评论管理',
-    to: '/admin/comments',
-    icon: 'M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z',
-  },
+
   {
     label: '分类管理',
     to: '/admin/categories',

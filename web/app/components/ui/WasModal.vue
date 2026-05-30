@@ -76,7 +76,7 @@
 </template>
 
 <script setup lang="ts">
-withDefaults(defineProps<{
+const props = withDefaults(defineProps<{
   modelValue: boolean
   title?: string
   showClose?: boolean
