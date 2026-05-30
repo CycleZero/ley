@@ -159,15 +159,12 @@ func buildHandler(options *v1.JWT, holder *jwtHolder) middleware.Middleware {
 	return func(next http.RoundTripper) http.RoundTripper {
 		return middleware.RoundTripperFunc(func(req *http.Request) (*http.Response, error) {
 			fmt.Println("[JWT] REQ path=", req.URL.Path)
-			if _, shouldSkip := skipPaths[req.URL.Path]; shouldSkip {
-				fmt.Println("[JWT] SKIP path=", req.URL.Path)
-				return next.RoundTrip(req)
-			}
+			_, shouldSkip := skipPaths[req.URL.Path]
 
 			authHeader := req.Header.Get("Authorization")
 			if authHeader == "" {
-				fmt.Println("[JWT] 401: missing auth header, path=", req.URL.Path)
-				if required {
+				fmt.Println("[JWT] missing auth header, path=", req.URL.Path, "skip=", shouldSkip)
+				if !shouldSkip && required {
 					return newUnauthorizedResponse(req, "missing authorization header"), nil
 				}
 				return next.RoundTrip(req)
@@ -175,8 +172,8 @@ func buildHandler(options *v1.JWT, holder *jwtHolder) middleware.Middleware {
 
 			tokenString := extractToken(authHeader)
 			if tokenString == "" {
-				fmt.Println("[JWT] 401: bad header format, path=", req.URL.Path)
-				if required {
+				fmt.Println("[JWT] bad header format, path=", req.URL.Path, "skip=", shouldSkip)
+				if !shouldSkip && required {
 					return newUnauthorizedResponse(req, "invalid authorization header format"), nil
 				}
 				return next.RoundTrip(req)
@@ -184,14 +181,14 @@ func buildHandler(options *v1.JWT, holder *jwtHolder) middleware.Middleware {
 
 			inst := holder.get()
 			if inst == nil {
-				fmt.Println("[JWT] 401: holder nil, path=", req.URL.Path)
+				fmt.Println("[JWT] holder nil, path=", req.URL.Path)
 				return newUnauthorizedResponse(req, "jwt auth service not ready"), nil
 			}
 
 			claims, err := inst.jwt.ParseAccessToken(tokenString)
 			if err != nil {
-				fmt.Println("[JWT] 401: token invalid, path=", req.URL.Path, "err=", err)
-				if required {
+				fmt.Println("[JWT] token invalid, path=", req.URL.Path, "err=", err, "skip=", shouldSkip)
+				if !shouldSkip && required {
 					return newUnauthorizedResponse(req, "invalid or expired token"), nil
 				}
 				return next.RoundTrip(req)
@@ -202,15 +199,18 @@ func buildHandler(options *v1.JWT, holder *jwtHolder) middleware.Middleware {
 			req.Header.Set(meta.AuthUserIDKey, strconv.FormatUint(claims.UserId, 10))
 			req.Header.Set(meta.AuthUserNameKey, claims.UserName)
 
-		ctx := req.Context()
-		reqMeta := &meta.RequestMetaData{
-			Auth: meta.Auth{
-				UserID:   claims.UserId,
-				UserName: claims.UserName,
-			},
-		}
-		ctx = meta.NewClientCtx(ctx, reqMeta)
-		return next.RoundTrip(req.WithContext(ctx))
+			ctx := req.Context()
+			ctx = context.WithValue(ctx, "user_id", claims.UserId)
+			ctx = context.WithValue(ctx, "user_name", claims.UserName)
+
+			reqMeta := &meta.RequestMetaData{
+				Auth: meta.Auth{
+					UserID:   claims.UserId,
+					UserName: claims.UserName,
+				},
+			}
+			ctx = meta.NewClientCtx(ctx, reqMeta)
+			return next.RoundTrip(req.WithContext(ctx))
 		})
 	}
 }
