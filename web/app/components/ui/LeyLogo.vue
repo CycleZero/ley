@@ -6,13 +6,19 @@
   >
     <!-- L 形小径 -->
     <path
-      d="M7 6 L7 17 L17 17"
+      d="M8 5 L8 16 L17 16"
       stroke="currentColor"
-      stroke-width="2.5"
+      stroke-width="2"
       stroke-linecap="round"
       stroke-linejoin="round"
+      fill="none"
     />
-    <!-- 起点标记 / 墨滴 -->
-    <circle cx="7" cy="5.5" r="2.5" fill="currentColor" />
+    <!-- 起点标记：拐角外侧小圆点 -->
+    <circle
+      cx="5"
+      cy="16"
+      r="1.3"
+      fill="currentColor"
+    />
   </svg>
 </template>
