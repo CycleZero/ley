@@ -24,9 +24,10 @@
       <!-- Logo -->
       <NuxtLink
         to="/"
-        class="font-serif-jp text-lg font-semibold text-heading tracking-wider hover:text-accent transition-colors"
+        class="flex items-center gap-1.5 font-serif-jp text-lg font-semibold text-heading tracking-wider hover:text-accent transition-colors"
       >
-        Ley
+        <LeyLogo class="w-5 h-5" />
+        <span>Ley</span>
       </NuxtLink>
 
       <!-- 桌面端导航 -->
