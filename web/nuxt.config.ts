@@ -75,7 +75,11 @@ export default defineNuxtConfig({
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
       ],
       link: [
-        { rel: 'icon', type: 'image/svg+xml', href: '/logo.svg' },
+        // Favicon：现代浏览器使用 SVG，Safari / 旧浏览器回退到 ICO
+        { rel: 'icon', type: 'image/svg+xml', href: '/logo.svg', sizes: 'any' },
+        { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },
+        // iOS / PWA 主屏图标（建议使用 180x180 PNG）
+        { rel: 'apple-touch-icon', href: '/apple-touch-icon.png', sizes: '180x180' },
         // 霞鹜文楷
         {
           rel: 'stylesheet',
