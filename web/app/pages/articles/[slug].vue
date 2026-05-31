@@ -152,6 +152,10 @@ onMounted(() => {
   if (!article.value) {
     articleStore.fetchArticle(slug.value)
   }
+  // 记录浏览量（客户端渲染完成后触发，避免 SSR 期间误计）
+  if (article.value?.id) {
+    articleStore.recordView(article.value.id)
+  }
 })
 
 // 阅读时长估算（中文字数 / 500）

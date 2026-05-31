@@ -312,6 +312,25 @@ func (r *articleRepo) UpdateTagsArticleCount(ctx context.Context, tagIDs []uint,
 }
 
 // =============================================================================
+// 浏览量批量持久化（定时 flush 调用）
+// =============================================================================
+
+func (r *articleRepo) FlushViewCounts(ctx context.Context, counts map[uint]int64) error {
+	if len(counts) == 0 {
+		return nil
+	}
+	return r.data.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		for id, delta := range counts {
+			if err := tx.Model(&ArticlePO{}).Where("id = ?", id).
+				UpdateColumn("view_count", gorm.Expr("view_count + ?", delta)).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// =============================================================================
 // 标签关联
 // =============================================================================
 

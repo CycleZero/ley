@@ -258,20 +258,80 @@ func (c *InMemoryCache) Expire(ctx context.Context, key string, expiration time.
 	return nil
 }
 
-// MGet returns values for multiple keys.
-func (c *InMemoryCache) MGet(ctx context.Context, keys ...string) ([][]byte, error) {
+// MGet returns values for multiple keys as a key→value map.
+func (c *InMemoryCache) MGet(ctx context.Context, keys []string) (map[string][]byte, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	c.GetCalls[keys[0]]++
-	result := make([][]byte, 0, len(keys))
+	if len(keys) > 0 {
+		c.GetCalls[keys[0]]++
+	}
+	result := make(map[string][]byte, len(keys))
 	for _, k := range keys {
 		if v, ok := c.store[k]; ok {
-			result = append(result, v)
-		} else {
-			result = append(result, nil)
+			result[k] = v
 		}
 	}
 	return result, nil
+}
+
+// Decr atomically decrements the key's value as an int64.
+func (c *InMemoryCache) Decr(ctx context.Context, key string) (int64, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.GetCalls[key]++
+	data, ok := c.store[key]
+	if !ok {
+		c.store[key] = []byte("-1")
+		return -1, nil
+	}
+	var n int64
+	fmt.Sscanf(string(data), "%d", &n)
+	n--
+	c.store[key] = []byte(fmt.Sprintf("%d", n))
+	return n, nil
+}
+
+// GetOrSet reads cache, falling back to loader on miss.
+func (c *InMemoryCache) GetOrSet(ctx context.Context, key string, loader func() (any, error), expiration time.Duration) ([]byte, error) {
+	val, err := c.Get(ctx, key)
+	if err == nil {
+		return val, nil
+	}
+	if !errors.Is(err, cache.ErrKeyNotFound) {
+		return nil, err
+	}
+	loaded, err := loader()
+	if err != nil {
+		return nil, err
+	}
+	if setErr := c.Set(ctx, key, loaded, expiration); setErr != nil {
+		return nil, setErr
+	}
+	return c.Get(ctx, key)
+}
+
+// GetDel atomically reads and deletes a key.
+func (c *InMemoryCache) GetDel(ctx context.Context, key string) ([]byte, error) {
+	val, err := c.Get(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	_ = c.Delete(ctx, key)
+	return val, nil
+}
+
+// GetObjectDel atomically reads, deserializes and deletes a key.
+func (c *InMemoryCache) GetObjectDel(ctx context.Context, key string, value any) error {
+	val, err := c.GetDel(ctx, key)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(val, value)
+}
+
+// ScanAll scans and returns all keys matching a pattern (no-op in memory, returns empty).
+func (c *InMemoryCache) ScanAll(ctx context.Context, pattern string) ([]string, error) {
+	return nil, nil
 }
 
 // Close is a no-op.

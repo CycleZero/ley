@@ -64,6 +64,10 @@ service ArticleService {
     option (google.api.http) = { delete: "/api/v1/articles/{id}/like" };
     option (openapi.v3.operation) = { summary: "取消点赞" description: "取消对文章的点赞（幂等）" tags: "点赞" };
   }
+  rpc ViewArticle(ViewArticleRequest) returns (ViewArticleReply) {
+    option (google.api.http) = { post: "/api/v1/articles/{id}/view" body: "*" };
+    option (openapi.v3.operation) = { summary: "浏览文章" description: "记录文章浏览量。同一IP 1小时内重复浏览同一篇文章会被去重。" tags: "文章" };
+  }
 }
 
 
@@ -183,6 +187,9 @@ message LikeArticleRequest { uint64 id = 1; }
 message LikeArticleReply {}
 message UnlikeArticleRequest { uint64 id = 1; }
 message UnlikeArticleReply {}
+
+message ViewArticleRequest { uint64 id = 1; }
+message ViewArticleReply { bool counted = 1; }
 
 
 message CreateTagRequest { string name = 1; }

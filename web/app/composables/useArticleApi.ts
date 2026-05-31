@@ -101,6 +101,15 @@ export function useArticleApi() {
       })
       return unwrap(res)
     },
+
+    /** 浏览文章（记录浏览量） */
+    view: async (id: string) => {
+      const res = await client<GatewayResponse<ViewArticleReply>>(`/api/v1/articles/${id}/view`, {
+        method: 'POST',
+        body: { id },
+      })
+      return unwrap(res)
+    },
   }
 }
 

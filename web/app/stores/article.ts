@@ -186,6 +186,24 @@ export const useArticleStore = defineStore('article', () => {
   }
 
   /**
+   * 记录文章浏览量
+   * 在文章详情页加载成功后调用，同一 IP 去重。
+   * 如果 counted=true，乐观更新当前文章的 viewCount。
+   */
+  async function recordView(id: string) {
+    try {
+      const reply = await api.view(id)
+      if (reply.counted && currentArticle.value) {
+        currentArticle.value.viewCount = String(Number(currentArticle.value.viewCount) + 1)
+      }
+      return reply.counted
+    }
+    catch {
+      return false
+    }
+  }
+
+  /**
    * 全文搜索
    */
   async function searchArticles(keyword: string, params?: { page?: number; pageSize?: number }) {
@@ -255,6 +273,7 @@ export const useArticleStore = defineStore('article', () => {
     publishArticle,
     archiveArticle,
     toggleLike,
+    recordView,
     searchArticles,
     resetDraft,
     clearSearch,

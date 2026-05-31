@@ -246,6 +246,10 @@ export interface UnlikeArticleReply {
   // 空对象
 }
 
+export interface ViewArticleReply {
+  counted: boolean
+}
+
 export interface SearchArticlesReply {
   articles: ArticleInfo[]
   total: string

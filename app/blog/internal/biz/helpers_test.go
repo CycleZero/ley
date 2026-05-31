@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/CycleZero/ley/pkg/cache"
 	"github.com/CycleZero/ley/pkg/eventbus"
 	"github.com/CycleZero/ley/pkg/meta"
 	mqPkg "github.com/CycleZero/ley/pkg/mq"
@@ -128,6 +129,7 @@ func (m *mockArticleRepo) IncrementViewCount(ctx context.Context, id uint, delta
 	return nil
 }
 func (m *mockArticleRepo) UpdateTagsArticleCount(ctx context.Context, tagIDs []uint, delta int64) error { return nil }
+func (m *mockArticleRepo) FlushViewCounts(ctx context.Context, counts map[uint]int64) error { return nil }
 
 // ---- tag repo mock ----
 
@@ -313,6 +315,34 @@ func (m *mockEventBus) Events() []mockEvent { m.mu.Lock(); defer m.mu.Unlock(); 
 func (m *mockEventBus) Reset() { m.mu.Lock(); defer m.mu.Unlock(); m.events = nil }
 
 // =============================================================================
+// Mock Cache
+// =============================================================================
+
+type mockCache struct{}
+
+func newMockCache() cache.Cache { return &mockCache{} }
+
+func (m *mockCache) Get(ctx context.Context, key string) ([]byte, error)           { return nil, cache.ErrKeyNotFound }
+func (m *mockCache) GetObject(ctx context.Context, key string, value any) error     { return cache.ErrKeyNotFound }
+func (m *mockCache) MGet(ctx context.Context, keys []string) (map[string][]byte, error) { return make(map[string][]byte), nil }
+func (m *mockCache) Set(ctx context.Context, key string, value any, expiration time.Duration) error { return nil }
+func (m *mockCache) SetNX(ctx context.Context, key string, value any, expiration time.Duration) (bool, error) { return true, nil }
+func (m *mockCache) Delete(ctx context.Context, key string) error                    { return nil }
+func (m *mockCache) Exists(ctx context.Context, key string) (bool, error)            { return false, nil }
+func (m *mockCache) TTL(ctx context.Context, key string) (time.Duration, error)      { return -2, nil }
+func (m *mockCache) Expire(ctx context.Context, key string, expiration time.Duration) error { return nil }
+func (m *mockCache) Incr(ctx context.Context, key string) (int64, error)            { return 1, nil }
+func (m *mockCache) Decr(ctx context.Context, key string) (int64, error)            { return -1, nil }
+func (m *mockCache) GetOrSet(ctx context.Context, key string, loader func() (any, error), expiration time.Duration) ([]byte, error) { return nil, cache.ErrKeyNotFound }
+func (m *mockCache) GetDel(ctx context.Context, key string) ([]byte, error)         { return nil, cache.ErrKeyNotFound }
+func (m *mockCache) GetObjectDel(ctx context.Context, key string, value any) error { return cache.ErrKeyNotFound }
+func (m *mockCache) ScanAll(ctx context.Context, pattern string) ([]string, error)   { return nil, nil }
+func (m *mockCache) Flush(ctx context.Context) error                                { return nil }
+func (m *mockCache) Close() error                                                   { return nil }
+
+// =============================================================================
+// Context Helpers
+// =============================================================================
 // Context Helpers
 // =============================================================================
 
@@ -329,7 +359,8 @@ func setupArticleUseCase() (*ArticleUseCase, *mockArticleRepo, *mockTagRepo, *mo
 	tr := newMockTagRepo()
 	cr := newMockCategoryRepo()
 	eb := newMockEventBus()
-	uc := NewArticleUseCase(ar, tr, cr, eb, testLogger())
+	c := newMockCache()
+	uc := NewArticleUseCase(ar, tr, cr, eb, c, testLogger())
 	return uc, ar, tr, cr, eb
 }
 

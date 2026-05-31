@@ -8,6 +8,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/CycleZero/ley/pkg/cache"
 	"github.com/CycleZero/ley/pkg/eventbus"
 	"github.com/CycleZero/ley/pkg/meta"
 
@@ -113,6 +114,9 @@ type ArticleRepo interface {
 
 	IncrementViewCount(ctx context.Context, id uint, delta int64) error
 	UpdateTagsArticleCount(ctx context.Context, tagIDs []uint, delta int64) error
+
+	// 浏览量批量持久化（定时 flush 任务调用）
+	FlushViewCounts(ctx context.Context, counts map[uint]int64) error
 }
 
 // =============================================================================
@@ -136,12 +140,13 @@ type ArticleUseCase struct {
 	tagRepo TagRepo           // 标签数据访问
 	catRepo CategoryRepo      // 分类数据访问
 	eb      eventbus.EventBus // 事件总线
+	cache   cache.Cache       // Redis 缓存（浏览量缓冲 + 防刷去重）
 	log     *log.Helper       // 结构化日志
 }
 
 // NewArticleUseCase 构造函数（由 Wire 调用注入依赖）
-func NewArticleUseCase(repo ArticleRepo, tagRepo TagRepo, catRepo CategoryRepo, eb eventbus.EventBus, logger log.Logger) *ArticleUseCase {
-	return &ArticleUseCase{repo: repo, tagRepo: tagRepo, catRepo: catRepo, eb: eb, log: log.NewHelper(logger)}
+func NewArticleUseCase(repo ArticleRepo, tagRepo TagRepo, catRepo CategoryRepo, eb eventbus.EventBus, c cache.Cache, logger log.Logger) *ArticleUseCase {
+	return &ArticleUseCase{repo: repo, tagRepo: tagRepo, catRepo: catRepo, eb: eb, cache: c, log: log.NewHelper(logger)}
 }
 
 // =============================================================================
@@ -889,6 +894,65 @@ func (uc *ArticleUseCase) IncrementView(ctx context.Context, articleID uint) err
 }
 
 // =============================================================================
+// ViewArticle — 记录文章浏览量（对外 API）
+//
+// 流程：
+//   1. IP 去重检查（Redis SetNX，1 小时窗口）
+//   2. 通过检查 → Redis Incr 浏览量缓存增量
+//   3. 未通过 → 返回 counted=false（不报错，幂等）
+//   4. Redis 故障 → 降级为直接写 DB（IncrementView）
+//
+// 返回值 counted：本次请求是否被计入浏览量。
+// =============================================================================
+
+func (uc *ArticleUseCase) ViewArticle(ctx context.Context, articleID uint, clientIP string) (bool, error) {
+	uc.log.WithContext(ctx).Debugf("[ViewArticle] article_id=%d ip=%s", articleID, clientIP)
+
+	if articleID == 0 {
+		return false, ErrArticleContentEmpty
+	}
+
+	// 1. IP 去重检查：ley:article:dedup:{articleID}:{clientIP}
+	dedupKey := fmt.Sprintf("%s%d:%s", ViewCountDedupPrefix, articleID, clientIP)
+	ok, err := uc.cache.SetNX(ctx, dedupKey, 1, ViewDedupWindow)
+	if err != nil {
+		// Redis 故障，降级为直接写 DB，但不阻断请求
+		uc.log.WithContext(ctx).Warnf("[ViewArticle] Redis 去重失败，降级写 DB: %v", err)
+		if dbErr := uc.IncrementView(ctx, articleID); dbErr != nil {
+			return false, dbErr
+		}
+		return true, nil
+	}
+	if !ok {
+		// 该 IP 在窗口期内已浏览过，直接返回（幂等，不报错）
+		uc.log.WithContext(ctx).Debugf("[ViewArticle] 重复浏览已过滤 article_id=%d ip=%s", articleID, clientIP)
+		return false, nil
+	}
+
+	// 2. Redis 原子自增浏览量缓存
+	viewKey := fmt.Sprintf("%s%d", ViewCountCachePrefix, articleID)
+	if _, err := uc.cache.Incr(ctx, viewKey); err != nil {
+		// Redis 故障，降级为直接写 DB
+		uc.log.WithContext(ctx).Warnf("[ViewArticle] Redis 计数失败，降级写 DB: %v", err)
+		if dbErr := uc.IncrementView(ctx, articleID); dbErr != nil {
+			return false, dbErr
+		}
+		return true, nil
+	}
+
+	// 3. 刷新 view key TTL（防止冷文章 key 永久驻留）
+	_ = uc.cache.Expire(ctx, viewKey, ViewCountTTL)
+
+	// 4. 异步发布浏览事件
+	_ = uc.eb.PublishAsync(ctx, TopicArticleViewed, &ArticleViewedEvent{
+		ArticleID: uint64(articleID),
+	})
+
+	uc.log.WithContext(ctx).Infof("[ViewArticle] 浏览计数成功 article_id=%d ip=%s", articleID, clientIP)
+	return true, nil
+}
+
+// =============================================================================
 // authorizeArticle — 权限校验（内部辅助方法）
 //
 // 同时完成"文章存在性检查"和"作者身份验证"两个操作。
@@ -1222,6 +1286,17 @@ const (
 	TopicArticleDeleted   = "article.deleted"   // 文章删除事件
 	TopicArticleViewed    = "article.viewed"    // 文章浏览事件
 	TopicArticleLiked     = "article.liked"     // 文章点赞事件
+)
+
+// =============================================================================
+// 浏览量缓存常量
+// =============================================================================
+
+const (
+	ViewCountCachePrefix = "ley:article:view:"    // Redis 浏览量增量 key 前缀
+	ViewCountDedupPrefix = "ley:article:dedup:"   // Redis IP 去重 key 前缀
+	ViewCountTTL         = 2 * time.Hour          // 浏览量缓存 key 存活时间
+	ViewDedupWindow      = 1 * time.Hour          // IP 去重窗口（同一 IP 对同一文章 1 小时内仅计 1 次）
 )
 
 // ArticleUpdatedEvent 文章更新事件

@@ -6,6 +6,7 @@ import (
 	blogv1 "github.com/CycleZero/ley/api/blog/v1"
 	commonv1 "github.com/CycleZero/ley/api/common/v1"
 	"github.com/CycleZero/ley/app/blog/internal/biz"
+	"github.com/CycleZero/ley/pkg/meta"
 
 	"github.com/go-kratos/kratos/v2/log"
 )
@@ -98,6 +99,16 @@ func (s *ArticleService) LikeArticle(ctx context.Context, req *blogv1.LikeArticl
 
 func (s *ArticleService) UnlikeArticle(ctx context.Context, req *blogv1.UnlikeArticleRequest) (*blogv1.UnlikeArticleReply, error) {
 	return &blogv1.UnlikeArticleReply{}, s.uc.UnlikeArticle(ctx, uint(req.Id))
+}
+
+func (s *ArticleService) ViewArticle(ctx context.Context, req *blogv1.ViewArticleRequest) (*blogv1.ViewArticleReply, error) {
+	// 从 Gateway 透传的 metadata 中提取客户端真实 IP
+	clientIP := meta.GetRequestMetaData(ctx).RealClientIp
+	counted, err := s.uc.ViewArticle(ctx, uint(req.Id), clientIP)
+	if err != nil {
+		return nil, err
+	}
+	return &blogv1.ViewArticleReply{Counted: counted}, nil
 }
 
 func toArticleInfo(a *biz.Article) *blogv1.ArticleInfo {
