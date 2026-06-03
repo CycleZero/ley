@@ -26,21 +26,14 @@ on:
           - production
           - staging
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}
-
 jobs:
   # =============================================================================
-  # 构建并推送 Docker 镜像到 GitHub Container Registry
+  # 构建后端 Docker 镜像并推送到 Harbor
   # =============================================================================
-  build-and-push:
-    name: Build & Push Images
+  build-backend:
+    name: Build Backend Images
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    permissions:
-      contents: read
-      packages: write
 
     steps:
       - name: Checkout code
@@ -49,12 +42,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to GitHub Container Registry
+      - name: Log in to Harbor
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: ${{ secrets.HARBOR_REGISTRY }}
+          username: ${{ secrets.HARBOR_USERNAME }}
+          password: ${{ secrets.HARBOR_PASSWORD }}
 
       # ---------- Auth 服务镜像 ----------
       - name: Build and push auth
@@ -64,8 +57,8 @@ jobs:
           file: ./app/auth/Dockerfile
           push: true
           tags: |
-            ${{ env.IMAGE_PREFIX }}/ley-auth:latest
-            ${{ env.IMAGE_PREFIX }}/ley-auth:${{ github.sha }}
+            ${{ secrets.HARBOR_REGISTRY }}/ley/ley-auth:latest
+            ${{ secrets.HARBOR_REGISTRY }}/ley/ley-auth:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
@@ -80,8 +73,8 @@ jobs:
           file: ./app/blog/Dockerfile
           push: true
           tags: |
-            ${{ env.IMAGE_PREFIX }}/ley-blog:latest
-            ${{ env.IMAGE_PREFIX }}/ley-blog:${{ github.sha }}
+            ${{ secrets.HARBOR_REGISTRY }}/ley/ley-blog:latest
+            ${{ secrets.HARBOR_REGISTRY }}/ley/ley-blog:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
@@ -96,26 +89,66 @@ jobs:
           file: ./app/gateway/Dockerfile
           push: true
           tags: |
-            ${{ env.IMAGE_PREFIX }}/ley-gateway:latest
-            ${{ env.IMAGE_PREFIX }}/ley-gateway:${{ github.sha }}
+            ${{ secrets.HARBOR_REGISTRY }}/ley/ley-gateway:latest
+            ${{ secrets.HARBOR_REGISTRY }}/ley/ley-gateway:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
   # =============================================================================
-  # 部署到远程服务器（通过 SSH）
+  # 构建前端静态文件
   # =============================================================================
-  deploy:
-    name: Deploy to Server
+  build-frontend:
+    name: Build Frontend
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [build-and-push]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+          cache-dependency-path: 'web/pnpm-lock.yaml'
+
+      - name: Install dependencies
+        working-directory: ./web
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate static site
+        working-directory: ./web
+        env:
+          NUXT_PUBLIC_API_BASE: ${{ secrets.NUXT_PUBLIC_API_BASE || 'https://api.blog.poyuan233.cn' }}
+        run: pnpm generate
+
+      - name: Upload frontend dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: web/.output/public
+          retention-days: 1
+
+  # =============================================================================
+  # 部署后端到后端服务器（Docker + Harbor）
+  # =============================================================================
+  deploy-backend:
+    name: Deploy Backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [build-backend]
     if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 配置 SSH 密钥（需在仓库 Settings > Secrets and variables > Actions 中配置）
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
@@ -126,38 +159,117 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
 
-      # 部署脚本：服务器端拉取最新镜像并重启服务
-      - name: Deploy via SSH
+      - name: Deploy backend via SSH
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
           SERVER_PORT: ${{ secrets.SERVER_PORT || '22' }}
           COMPOSE_PROJECT: ${{ secrets.COMPOSE_PROJECT || '~/ley' }}
+          HARBOR_REGISTRY: ${{ secrets.HARBOR_REGISTRY }}
+          HARBOR_USERNAME: ${{ secrets.HARBOR_USERNAME }}
+          HARBOR_PASSWORD: ${{ secrets.HARBOR_PASSWORD }}
         run: |
-          echo "=== 部署到 $SERVER_HOST ==="
+          echo "=== 部署后端到 $SERVER_HOST ==="
           ssh -p $SERVER_PORT $SERVER_USER@$SERVER_HOST "
             set -e
             cd $COMPOSE_PROJECT
+
             echo '--- 拉取最新代码 ---'
             git pull origin main
-            echo '--- 拉取最新镜像 ---'
-            docker-compose pull
+
+            echo '--- 登录 Harbor ---'
+            echo '$HARBOR_PASSWORD' | docker login $HARBOR_REGISTRY -u '$HARBOR_USERNAME' --password-stdin
+
+            echo '--- 拉取 Harbor 镜像 ---'
+            docker pull $HARBOR_REGISTRY/ley/ley-auth:${{ github.sha }}
+            docker pull $HARBOR_REGISTRY/ley/ley-blog:${{ github.sha }}
+            docker pull $HARBOR_REGISTRY/ley/ley-gateway:${{ github.sha }}
+
+            echo '--- 重命名为本地标签 ---'
+            docker tag $HARBOR_REGISTRY/ley/ley-auth:${{ github.sha }} ley-auth:latest
+            docker tag $HARBOR_REGISTRY/ley/ley-blog:${{ github.sha }} ley-blog:latest
+            docker tag $HARBOR_REGISTRY/ley/ley-gateway:${{ github.sha }} ley-gateway:latest
+
             echo '--- 重启服务 ---'
             docker-compose down
             docker-compose up -d
+
             echo '--- 清理旧镜像 ---'
             docker image prune -af --filter 'until=168h'
-            echo '--- 部署完成 ---'
+
+            echo '--- 后端部署完成 ---'
           "
 
-      - name: Health check
+      - name: Backend health check
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
         run: |
           echo "等待服务启动..."
           sleep 10
           curl -sf http://$SERVER_HOST:8000/api/v1/site/config || {
-            echo "健康检查失败"
+            echo "后端健康检查失败"
             exit 1
           }
-          echo "健康检查通过"
+          echo "后端健康检查通过"
+
+  # =============================================================================
+  # 部署前端到前端服务器（Nginx 静态文件）
+  # =============================================================================
+  deploy-frontend:
+    name: Deploy Frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [build-frontend]
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Download frontend dist
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: ./frontend-dist
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.FRONTEND_SSH_PRIVATE_KEY || secrets.SSH_PRIVATE_KEY }}
+
+      - name: Add frontend host to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.FRONTEND_SERVER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
+
+      - name: Deploy frontend via SCP/SSH
+        env:
+          FRONTEND_HOST: ${{ secrets.FRONTEND_SERVER_HOST }}
+          FRONTEND_USER: ${{ secrets.FRONTEND_SERVER_USER || secrets.SERVER_USER }}
+          FRONTEND_PORT: ${{ secrets.FRONTEND_SERVER_PORT || secrets.SERVER_PORT || '22' }}
+          DEPLOY_PATH: ${{ secrets.FRONTEND_DEPLOY_PATH || '/var/www/ley' }}
+        run: |
+          echo "=== 部署前端到 $FRONTEND_HOST ==="
+
+          # 创建远程目录
+          ssh -p $FRONTEND_PORT $FRONTEND_USER@$FRONTEND_HOST "mkdir -p $DEPLOY_PATH"
+
+          # 使用 rsync 增量同步（删除旧文件，保留 Nginx 配置）
+          rsync -avz --delete \
+            -e "ssh -p $FRONTEND_PORT" \
+            ./frontend-dist/ \
+            $FRONTEND_USER@$FRONTEND_HOST:$DEPLOY_PATH/
+
+          echo "--- 重载 Nginx ---"
+          ssh -p $FRONTEND_PORT $FRONTEND_USER@$FRONTEND_HOST "sudo nginx -t && sudo systemctl reload nginx || sudo nginx -s reload"
+
+          echo "--- 前端部署完成 ---"
+
+      - name: Frontend health check
+        env:
+          FRONTEND_HOST: ${{ secrets.FRONTEND_SERVER_HOST }}
+        run: |
+          echo "等待前端生效..."
+          sleep 3
+          curl -sf http://$FRONTEND_HOST/ || {
+            echo "前端健康检查失败"
+            exit 1
+          }
+          echo "前端健康检查通过"
