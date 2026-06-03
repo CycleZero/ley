@@ -97,8 +97,9 @@ jobs:
           # 创建远程目录
           ssh -p $FRONTEND_PORT $FRONTEND_USER@$FRONTEND_HOST "mkdir -p $DEPLOY_PATH"
 
-          # 使用 rsync 增量同步（删除远程多余文件，但不保留权限/属主，避免宝塔 www 用户权限冲突）
-          rsync -rlvz --delete \
+          # 使用 rsync 增量同步（--no-perms 避免宝塔文件权限冲突，排除 .user.ini 宝塔保护文件）
+          rsync -rlvz --delete --no-perms \
+            --exclude='.user.ini' \
             -e "ssh -p $FRONTEND_PORT" \
             ./frontend-dist/ \
             $FRONTEND_USER@$FRONTEND_HOST:$DEPLOY_PATH/
