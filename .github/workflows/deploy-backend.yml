@@ -165,12 +165,10 @@ jobs:
           "
 
       - name: Backend health check
-        env:
-          SERVER_HOST: ${{ secrets.SERVER_HOST }}
         run: |
           echo "等待服务启动..."
           sleep 10
-          curl -sf http://$SERVER_HOST:8000/api/v1/site/config || {
+          curl -sf https://api.blog.poyuan233.cn/api/v1/site/config || {
             echo "后端健康检查失败"
             exit 1
           }
