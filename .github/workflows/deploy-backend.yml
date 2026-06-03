@@ -1,4 +1,4 @@
-name: CD
+name: CD - Backend
 
 on:
   push:
@@ -8,7 +8,6 @@ on:
       - 'app/**'
       - 'pkg/**'
       - 'conf/**'
-      - 'web/**'
       - 'go.mod'
       - 'go.sum'
       - 'Makefile'
@@ -95,47 +94,6 @@ jobs:
           cache-to: type=gha,mode=max
 
   # =============================================================================
-  # 构建前端静态文件
-  # =============================================================================
-  build-frontend:
-    name: Build Frontend
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-          cache-dependency-path: 'web/pnpm-lock.yaml'
-
-      - name: Install dependencies
-        working-directory: ./web
-        run: pnpm install --frozen-lockfile
-
-      - name: Generate static site
-        working-directory: ./web
-        env:
-          NUXT_PUBLIC_API_BASE: ${{ secrets.NUXT_PUBLIC_API_BASE || 'https://api.blog.poyuan233.cn' }}
-        run: pnpm generate
-
-      - name: Upload frontend dist
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-dist
-          path: web/.output/public
-          retention-days: 1
-
-  # =============================================================================
   # 部署后端到后端服务器（Docker + Harbor）
   # =============================================================================
   deploy-backend:
@@ -211,65 +169,3 @@ jobs:
             exit 1
           }
           echo "后端健康检查通过"
-
-  # =============================================================================
-  # 部署前端到前端服务器（Nginx 静态文件）
-  # =============================================================================
-  deploy-frontend:
-    name: Deploy Frontend
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: [build-frontend]
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
-
-    steps:
-      - name: Download frontend dist
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-dist
-          path: ./frontend-dist
-
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.FRONTEND_SSH_PRIVATE_KEY || secrets.SSH_PRIVATE_KEY }}
-
-      - name: Add frontend host to known_hosts
-        run: |
-          mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.FRONTEND_SERVER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null || true
-
-      - name: Deploy frontend via SCP/SSH
-        env:
-          FRONTEND_HOST: ${{ secrets.FRONTEND_SERVER_HOST }}
-          FRONTEND_USER: ${{ secrets.FRONTEND_SERVER_USER || secrets.SERVER_USER }}
-          FRONTEND_PORT: ${{ secrets.FRONTEND_SERVER_PORT || secrets.SERVER_PORT || '22' }}
-          DEPLOY_PATH: ${{ secrets.FRONTEND_DEPLOY_PATH || '/var/www/ley' }}
-        run: |
-          echo "=== 部署前端到 $FRONTEND_HOST ==="
-
-          # 创建远程目录
-          ssh -p $FRONTEND_PORT $FRONTEND_USER@$FRONTEND_HOST "mkdir -p $DEPLOY_PATH"
-
-          # 使用 rsync 增量同步（删除旧文件，保留 Nginx 配置）
-          rsync -avz --delete \
-            -e "ssh -p $FRONTEND_PORT" \
-            ./frontend-dist/ \
-            $FRONTEND_USER@$FRONTEND_HOST:$DEPLOY_PATH/
-
-          echo "--- 重载 Nginx ---"
-          ssh -p $FRONTEND_PORT $FRONTEND_USER@$FRONTEND_HOST "sudo nginx -t && sudo systemctl reload nginx || sudo nginx -s reload"
-
-          echo "--- 前端部署完成 ---"
-
-      - name: Frontend health check
-        env:
-          FRONTEND_HOST: ${{ secrets.FRONTEND_SERVER_HOST }}
-        run: |
-          echo "等待前端生效..."
-          sleep 3
-          curl -sf http://$FRONTEND_HOST/ || {
-            echo "前端健康检查失败"
-            exit 1
-          }
-          echo "前端健康检查通过"

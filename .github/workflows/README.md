@@ -1,11 +1,39 @@
 # GitHub Actions CI/CD 配置说明
 
-本项目包含两套自动化工作流：
+本项目采用 **前后端分离触发** 的 CI/CD 设计：
 
 | 工作流 | 文件 | 触发条件 | 用途 |
 |---|---|---|---|
-| **CI** | `.github/workflows/ci.yml` | `push` / `pull_request` | 编译检查、单元测试、前端构建、Docker 镜像构建验证 |
-| **CD** | `.github/workflows/deploy.yml` | `push` 到 `main` / 手动触发 | 构建并推送 Docker 镜像、SSH 部署到服务器 |
+| **CI** | `.github/workflows/ci.yml` | `push` / `pull_request`（全量） | 编译检查、单元测试、前端构建、Docker 镜像构建验证 |
+| **CD - Backend** | `.github/workflows/deploy-backend.yml` | `push main` 且修改了**后端代码** | 构建并推送后端 Docker 镜像到 Harbor，SSH 部署到后端服务器 |
+| **CD - Frontend** | `.github/workflows/deploy-frontend.yml` | `push main` 且修改了**前端代码** | 构建 Nuxt 静态站点，rsync 部署到前端 Nginx 服务器 |
+
+> 💡 **设计原则**：CI 保持全量检查（编译不省），CD 按需触发（只改前端时不浪费后端镜像构建时间）。
+
+---
+
+## 触发规则
+
+### 修改后端文件时（如 `app/blog/internal/biz/article.go`）
+
+触发的工作流：
+- ✅ **CI** — 全量检查（backend + frontend + docker）
+- ✅ **CD - Backend** — 构建后端镜像 → 推送 Harbor → 部署后端服务器
+- ❌ **CD - Frontend** — **不触发**
+
+### 修改前端文件时（如 `web/app/pages/about.vue`）
+
+触发的工作流：
+- ✅ **CI** — 全量检查
+- ❌ **CD - Backend** — **不触发**
+- ✅ **CD - Frontend** — 构建静态站点 → rsync 到前端服务器
+
+### 修改通用文件时（如 `go.mod`、`Makefile`）
+
+触发的工作流：
+- ✅ **CI** — 全量检查
+- ✅ **CD - Backend** — 触发（`go.mod` 属于后端路径）
+- ❌ **CD - Frontend** — **不触发**
 
 ---
 
@@ -15,49 +43,23 @@
 
 包含三个并行 Job：
 
-1. **backend** — Go 后端
-   - 安装 protoc v25.3 + Go 1.26
-   - `make init` → `make api config internal_proto` → `make wire`
-   - `make test-unit`（运行单元测试 + 覆盖率）
-   - `make build && make build-gateway`
+1. **backend** — Go 后端编译 + 单元测试
+2. **frontend** — Nuxt 前端安装依赖 + 构建
+3. **docker** — Docker 镜像构建验证（不推送）
 
-2. **frontend** — Nuxt 前端
-   - 安装 Node 22 + pnpm 10
-   - `pnpm install --frozen-lockfile`
-   - `pnpm build`
+### CD - Backend (`deploy-backend.yml`)
 
-3. **docker** — Docker 镜像构建检查
-   - 构建 `ley-builder`、`ley-auth`、`ley-blog`、`ley-gateway` 镜像
-   - **不推送**，仅验证 Dockerfile 可用性
-   - 启用 BuildKit 缓存加速
+包含两个串行 Job：
 
-### CD (`deploy.yml`)
+1. **build-backend** — 构建 auth/blog/gateway 镜像并推送到 Harbor
+2. **deploy-backend** — SSH 到后端服务器，从 Harbor 拉取镜像并重命名标签，docker-compose 重启
 
-**前后端分离部署**，包含四个 Job，分为两条并行流水线：
+### CD - Frontend (`deploy-frontend.yml`)
 
-**后端流水线：**
-1. **build-backend** — 构建 Go 服务镜像并推送到 **Harbor 私有仓库**
-   - 镜像标签：`latest` + `${{ github.sha }}`
-   - 仓库地址通过 `secrets.HARBOR_REGISTRY` 动态注入，**不在仓库中暴露任何 Registry 地址**
-   - 默认项目名：`ley`
+包含两个串行 Job：
 
-2. **deploy-backend** — SSH 到**后端服务器**执行部署
-   - 服务器端执行：`git pull` → `docker login Harbor` → `docker pull` → `docker tag` → `docker-compose up -d`
-   - 镜像从 Harbor 拉取后重命名为本地标签（`ley-auth:latest` 等），不与 `docker-compose.yml` 中硬编码的 Registry 地址耦合
-   - 自动清理 7 天前的旧镜像
-   - 部署完成后进行 HTTP 健康检查 (`/api/v1/site/config`)
-
-**前端流水线：**
-3. **build-frontend** — 构建 Nuxt 静态站点
-   - `pnpm install` → `pnpm generate`
-   - 产物保存在 `web/.output/public`
-   - 上传到 Artifact（供 deploy-frontend 下载）
-
-4. **deploy-frontend** — 通过 SSH/rsync 部署到**前端服务器**
-   - 从 Artifact 下载构建产物
-   - `rsync -avz --delete` 增量同步到 Nginx 根目录
-   - 远程重载 Nginx
-   - 部署完成后进行 HTTP 健康检查 (`/`)
+1. **build-frontend** — `pnpm generate` 生成静态站点，上传 Artifact
+2. **deploy-frontend** — 从 Artifact 下载，rsync 增量同步到前端服务器 Nginx 目录，远程 reload nginx
 
 ---
 
@@ -67,14 +69,14 @@
 
 | Secret 名称 | 说明 | 示例 |
 |---|---|---|
-| `SSH_PRIVATE_KEY` | 后端服务器 SSH 私钥（用于免密登录） | `-----BEGIN OPENSSH PRIVATE KEY-----...` |
+| `SSH_PRIVATE_KEY` | **后端**服务器 SSH 私钥 | `-----BEGIN OPENSSH PRIVATE KEY-----...` |
 | `SERVER_HOST` | **后端**服务器 IP 或域名 | `123.45.67.89` |
-| `SERVER_USER` | **后端**SSH 登录用户名 | `root` 或 `deploy` |
+| `SERVER_USER` | **后端**SSH 用户名 | `root` 或 `deploy` |
 | `SERVER_PORT` | **后端**SSH 端口（可选，默认 22） | `22` |
-| `COMPOSE_PROJECT` | **后端**服务器上项目路径（可选，默认 `~/ley`） | `/opt/ley` |
-| `FRONTEND_SSH_PRIVATE_KEY` | **前端**服务器 SSH 私钥（可选，默认与后端共用 `SSH_PRIVATE_KEY`） | 同上 |
+| `COMPOSE_PROJECT` | **后端**服务器项目路径（可选，默认 `~/ley`） | `/opt/ley` |
+| `FRONTEND_SSH_PRIVATE_KEY` | **前端**服务器 SSH 私钥（可选，默认与后端共用） | 同上 |
 | `FRONTEND_SERVER_HOST` | **前端**服务器 IP 或域名 | `223.45.67.89` |
-| `FRONTEND_SERVER_USER` | **前端**SSH 登录用户名（可选，默认与后端共用 `SERVER_USER`） | `root` |
+| `FRONTEND_SERVER_USER` | **前端**SSH 用户名（可选，默认与后端共用） | `root` |
 | `FRONTEND_SERVER_PORT` | **前端**SSH 端口（可选，默认 22） | `22` |
 | `FRONTEND_DEPLOY_PATH` | **前端**Nginx 根目录（可选，默认 `/var/www/ley`） | `/usr/share/nginx/html/ley` |
 | `NUXT_PUBLIC_API_BASE` | 前端构建时的 API 基地址（可选，默认 `https://api.blog.poyuan233.cn`） | `https://api.yoursite.com` |
@@ -88,27 +90,27 @@
 
 ### 配置步骤
 
-1. **生成部署专用 SSH 密钥对**（不要在服务器上复用你的个人密钥）：
+1. **生成部署专用 SSH 密钥对**：
    ```bash
    ssh-keygen -t ed25519 -C "github-actions-deploy" -f ~/.ssh/ley_deploy
    ```
 
-2. **将公钥添加到服务器的 `~/.ssh/authorized_keys`**：
+2. **将公钥添加到服务器的 `~/.ssh/authorized_keys`**（前后端服务器都要）：
    ```bash
-   ssh-copy-id -i ~/.ssh/ley_deploy.pub root@你的服务器IP
+   ssh-copy-id -i ~/.ssh/ley_deploy.pub root@后端服务器IP
+   ssh-copy-id -i ~/.ssh/ley_deploy.pub root@前端服务器IP
    ```
 
 3. **将私钥内容复制到 GitHub Secrets**：
    ```bash
    cat ~/.ssh/ley_deploy | pbcopy  # macOS
-   # 或
-   cat ~/.ssh/ley_deploy | clip     # Windows
+   # 或 Windows: cat ~/.ssh/ley_deploy | clip
    ```
-   在 GitHub 上新建 Secret，名称为 `SSH_PRIVATE_KEY`，粘贴私钥内容。
+   在 GitHub 上新建 Secret，名称为 `SSH_PRIVATE_KEY`（前后端共用）或分别配置 `SSH_PRIVATE_KEY` + `FRONTEND_SSH_PRIVATE_KEY`。
 
 4. **添加 Harbor Secrets**：`HARBOR_REGISTRY`、`HARBOR_USERNAME`、`HARBOR_PASSWORD`。
 
-5. **添加服务器连接 Secrets**：`SERVER_HOST`、`SERVER_USER` 等。
+5. **添加服务器连接 Secrets**：`SERVER_HOST`、`FRONTEND_SERVER_HOST` 等。
 
 ---
 
@@ -116,7 +118,7 @@
 
 除了自动推送 `main` 分支触发外，你也可以在 GitHub 页面手动触发：
 
-1. 进入仓库 → **Actions** → **CD**
+1. 进入仓库 → **Actions** → **CD - Backend** 或 **CD - Frontend**
 2. 点击右侧 **Run workflow**
 3. 选择分支（默认 `main`）和部署目标（`production` / `staging`）
 4. 点击 **Run workflow**
@@ -132,22 +134,7 @@ A: `docker-compose.yml` 使用了 `network_mode: host`，这在 GitHub Actions �
 A: 修改仓库 Secrets：
 - `HARBOR_REGISTRY` → 你的仓库地址（如 `registry.cn-hangzhou.aliyuncs.com`）
 - `HARBOR_USERNAME` / `HARBOR_PASSWORD` → 对应仓库的凭据
-- 修改 `deploy.yml` 中的镜像路径前缀（默认是 `/ley/ley-auth`，根据你的仓库命名空间调整）
-
-### Q: 我只想部署到多台服务器怎么办？
-A: 在 `deploy.yml` 的 `deploy` job 中使用矩阵策略：
-```yaml
-strategy:
-  matrix:
-    server: [server1, server2]
-```
-并对应配置 `secrets.SERVER_HOST_1`、`secrets.SERVER_HOST_2` 等。
-
-### Q: 前端构建的环境变量在哪里设置？
-A: 通过 `secrets.NUXT_PUBLIC_API_BASE` 设置。CD 工作流在 `build-frontend` 步骤中注入该变量，确保前端打包时指向正确的后端 API 地址。
-
-### Q: 我的前端服务器没有 rsync 怎么办？
-A: 可以在前端服务器上安装：`sudo apt-get install rsync`（Ubuntu/Debian）或 `sudo yum install rsync`（CentOS）。如果确实无法安装，可改用 `scp -r` 替代，但无法做增量删除。
+- 修改 workflow 中的镜像路径前缀（默认是 `/ley/ley-auth`，根据你的仓库命名空间调整）
 
 ### Q: 前端部署时 Nginx 重载失败？
 A: 确保 GitHub Actions 使用的 SSH 用户有 `sudo` 权限执行 `nginx -t` 和 `systemctl reload nginx`。如果用户不在 sudoers 中，需要在前端服务器上配置免密 sudo：
@@ -158,18 +145,17 @@ sudo visudo
 deployuser ALL=(ALL) NOPASSWD: /usr/sbin/nginx, /bin/systemctl reload nginx
 ```
 
-### Q: 前后端部署能否只部署其中一个？
-A: 当前设计是 `push main` 时前后端同时触发。如果只想部署后端：
-1. 临时修改工作流文件，注释掉 `build-frontend` 和 `deploy-frontend` job
-2. 或使用 `workflow_dispatch` 手动触发，配合条件判断
+### Q: 修改 `docker-compose.yml` 会触发前端部署吗？
+A: **不会**。`docker-compose.yml` 属于后端路径（在 `deploy-backend.yml` 的 `paths` 中定义），只会触发后端 CD。前端 CD 的触发路径只有 `web/**`。
 
-更优雅的方案是：通过 `paths` 过滤——修改 `web/` 目录只触发前端，修改 `app/` 只触发后端。如需此优化请告知。
+### Q: 我想同时部署前后端怎么办？
+A: 使用 **Actions** 页面分别手动触发 **CD - Backend** 和 **CD - Frontend**。或者修改一个前后端都触及的文件（如根目录的 README），但这会同时触发两个 workflow。
 
 ---
 
 ## 扩展建议
 
-- **添加缓存预热**：在 CI 中缓存 `~/go/pkg/mod` 和 `pnpm store`，已配置
 - **添加代码扫描**：集成 `gosec`（Go 安全扫描）和 `eslint`
 - **添加集成测试**：在 `make test-integration` 可用的前提下，添加集成测试 job
 - **添加通知**：部署成功后发送飞书/钉钉/Slack 消息
+- **前端缓存策略**：在 Nginx 中配置静态资源的长期缓存（`Cache-Control: max-age=31536000`）
