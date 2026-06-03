@@ -90,7 +90,7 @@ jobs:
           FRONTEND_HOST: ${{ secrets.FRONTEND_SERVER_HOST }}
           FRONTEND_USER: ${{ secrets.FRONTEND_SERVER_USER || secrets.SERVER_USER }}
           FRONTEND_PORT: ${{ secrets.FRONTEND_SERVER_PORT || secrets.SERVER_PORT || '22' }}
-          DEPLOY_PATH: ${{ secrets.FRONTEND_DEPLOY_PATH || '/var/www/ley' }}
+          DEPLOY_PATH: ${{ secrets.FRONTEND_DEPLOY_PATH || '/www/wwwroot/blog.poyuan233.cn' }}
         run: |
           echo "=== 部署前端到 $FRONTEND_HOST ==="
 
@@ -103,8 +103,8 @@ jobs:
             ./frontend-dist/ \
             $FRONTEND_USER@$FRONTEND_HOST:$DEPLOY_PATH/
 
-          echo "--- 重载 Nginx ---"
-          ssh -p $FRONTEND_PORT $FRONTEND_USER@$FRONTEND_HOST "sudo nginx -t && sudo systemctl reload nginx || sudo nginx -s reload"
+          echo "--- 重载 Nginx (宝塔面板环境可忽略此步错误) ---"
+          ssh -p $FRONTEND_PORT $FRONTEND_USER@$FRONTEND_HOST "sudo nginx -t 2>/dev/null && sudo systemctl reload nginx 2>/dev/null || true" || true
 
           echo "--- 前端部署完成 ---"
 

@@ -121,8 +121,8 @@ jobs:
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
-          SERVER_PORT: ${{ secrets.SERVER_PORT || '22' }}
-          COMPOSE_PROJECT: ${{ secrets.COMPOSE_PROJECT || '~/ley' }}
+          SERVER_PORT: ${{ secrets.SERVER_PORT || '2366' }}
+          COMPOSE_PROJECT: ${{ secrets.COMPOSE_PROJECT || '/projects/ley' }}
           HARBOR_REGISTRY: ${{ secrets.HARBOR_REGISTRY }}
           HARBOR_USERNAME: ${{ secrets.HARBOR_USERNAME }}
           HARBOR_PASSWORD: ${{ secrets.HARBOR_PASSWORD }}
@@ -149,8 +149,8 @@ jobs:
             docker tag $HARBOR_REGISTRY/ley/ley-gateway:${{ github.sha }} ley-gateway:latest
 
             echo '--- 重启服务 ---'
-            docker-compose down
-            docker-compose up -d
+            docker compose -f /projects/ley/docker-compose.yml down
+            docker compose -f /projects/ley/docker-compose.yml up -d
 
             echo '--- 清理旧镜像 ---'
             docker image prune -af --filter 'until=168h'
