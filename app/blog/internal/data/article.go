@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/CycleZero/ley/app/blog/internal/biz"
@@ -288,6 +289,57 @@ func (r *articleRepo) List(ctx context.Context, query biz.ArticleListQuery) ([]*
 	var pos []ArticlePO
 	if err := db.Order(order).Offset(offset).Limit(query.PageSize).Find(&pos).Error; err != nil {
 		return nil, 0, fmt.Errorf("list articles: %w", err)
+	}
+
+	articles := make([]*biz.Article, 0, len(pos))
+	for i := range pos {
+		articles = append(articles, articlePOToBiz(&pos[i]))
+	}
+	return articles, total, nil
+}
+
+// =============================================================================
+// Search — 关键词搜索（仅已发布文章）
+//
+// 对标题、摘要、正文做 LIKE 模糊匹配，按发布时间倒序分页返回。
+// =============================================================================
+
+func (r *articleRepo) Search(ctx context.Context, keyword string, page, pageSize int) ([]*biz.Article, int64, error) {
+	ctx, span := r.data.startSpan(ctx, "ArticleRepo.Search")
+	defer span.End()
+	span.SetAttributes(attribute.String("keyword", keyword))
+
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 50 {
+		pageSize = 10
+	}
+	offset := (page - 1) * pageSize
+
+	r.data.log.WithContext(ctx).Debugf("[ArticleRepo.Search] keyword=%q page=%d size=%d", keyword, page, pageSize)
+
+	// LIKE 转义：防止 % _ 通配符干扰
+	escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(keyword)
+	pattern := "%" + escaped + "%"
+
+	db := r.data.db.WithContext(ctx).Preload("Tags").
+		Where("status = ?", statusToInt("published")).
+		Where("title LIKE ? ESCAPE '\\' OR excerpt LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\'", pattern, pattern, pattern)
+
+	// 统计总数
+	var total int64
+	if err := db.Model(&ArticlePO{}).Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("count search articles: %w", err)
+	}
+	if total == 0 {
+		return nil, 0, nil
+	}
+
+	// 分页查询（发布时间倒序）
+	var pos []ArticlePO
+	if err := db.Order("published_at DESC, id DESC").Offset(offset).Limit(pageSize).Find(&pos).Error; err != nil {
+		return nil, 0, fmt.Errorf("search articles: %w", err)
 	}
 
 	articles := make([]*biz.Article, 0, len(pos))

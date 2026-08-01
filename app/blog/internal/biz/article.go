@@ -103,6 +103,8 @@ type ArticleRepo interface {
 	FindByID(ctx context.Context, id uint) (*Article, error)
 	FindBySlug(ctx context.Context, slug string) (*Article, error)
 	List(ctx context.Context, query ArticleListQuery) ([]*Article, int64, error)
+	// Search 关键词搜索（仅已发布文章，标题/摘要/正文 LIKE 匹配）
+	Search(ctx context.Context, keyword string, page, pageSize int) ([]*Article, int64, error)
 
 	// 标签关联
 	AssociateTags(ctx context.Context, articleID uint, tagIDs []uint) error
@@ -781,15 +783,34 @@ func (uc *ArticleUseCase) ListArticles(ctx context.Context, query ArticleListQue
 }
 
 // =============================================================================
-// SearchArticles — 全文搜索（预留接口，后续接入搜索引擎）
+// SearchArticles — 关键词搜索
 //
-// 当前返回空结果，不作为功能入口。
-// 后续接入 Elasticsearch / Meilisearch 后在此处实现对搜索结果的处理。
+// 仅搜索已发布文章，对标题/摘要/正文做 LIKE 模糊匹配，按发布时间倒序分页返回。
+// 后续接入 Elasticsearch / Meilisearch 后替换为搜索引擎实现。
 // =============================================================================
 
 func (uc *ArticleUseCase) SearchArticles(ctx context.Context, keyword string, page, pageSize int) ([]*Article, int64, error) {
-	uc.log.WithContext(ctx).Debugf("[SearchArticles] 预留接口 keyword=%q page=%d page_size=%d", keyword, page, pageSize)
-	return nil, 0, nil
+	uc.log.WithContext(ctx).Debugf("[SearchArticles] keyword=%q page=%d page_size=%d", keyword, page, pageSize)
+
+	keyword = strings.TrimSpace(keyword)
+	if keyword == "" {
+		return nil, 0, nil
+	}
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 50 {
+		pageSize = 10
+	}
+
+	articles, total, err := uc.repo.Search(ctx, keyword, page, pageSize)
+	if err != nil {
+		uc.log.WithContext(ctx).Errorf("[SearchArticles] 搜索失败 err=%v", err)
+		return nil, 0, err
+	}
+
+	uc.log.WithContext(ctx).Debugf("[SearchArticles] 搜索完成 keyword=%q total=%d returned=%d", keyword, total, len(articles))
+	return articles, total, nil
 }
 
 // =============================================================================

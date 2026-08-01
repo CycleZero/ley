@@ -214,6 +214,75 @@ func TestArticleUseCase_ListArticles(t *testing.T) {
 	_ = articles
 }
 
+func TestArticleUseCase_SearchArticles(t *testing.T) {
+	uc, _, _, _, _ := setupArticleUseCase()
+	ctx := ctxWithUser(1)
+
+	// 创建一篇已发布文章（含搜索关键词）
+	created, err := uc.CreateArticle(ctx, "Kratos 微服务入门", "本文介绍 Kratos 框架的使用", "", "", nil, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if _, err := uc.PublishArticle(ctx, created.ID); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	t.Run("匹配标题", func(t *testing.T) {
+		articles, total, err := uc.SearchArticles(ctx, "Kratos", 1, 10)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if total != 1 || len(articles) != 1 {
+			t.Errorf("expected 1 result, got total=%d len=%d", total, len(articles))
+		}
+	})
+
+	t.Run("匹配正文", func(t *testing.T) {
+		articles, total, err := uc.SearchArticles(ctx, "框架", 1, 10)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if total != 1 || len(articles) != 1 {
+			t.Errorf("expected 1 result, got total=%d len=%d", total, len(articles))
+		}
+	})
+
+	t.Run("无结果", func(t *testing.T) {
+		articles, total, err := uc.SearchArticles(ctx, "不存在的关键词", 1, 10)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if total != 0 || len(articles) != 0 {
+			t.Errorf("expected 0 results, got total=%d len=%d", total, len(articles))
+		}
+	})
+
+	t.Run("空关键词返回空", func(t *testing.T) {
+		articles, total, err := uc.SearchArticles(ctx, "   ", 1, 10)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if total != 0 || len(articles) != 0 {
+			t.Errorf("expected 0 results, got total=%d len=%d", total, len(articles))
+		}
+	})
+
+	t.Run("草稿不可搜到", func(t *testing.T) {
+		draft, err := uc.CreateArticle(ctx, "草稿中的机密内容", "secret", "", "", nil, nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		_ = draft // 保持草稿状态
+		articles, total, err := uc.SearchArticles(ctx, "机密内容", 1, 10)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if total != 0 || len(articles) != 0 {
+			t.Errorf("expected 0 results for draft, got total=%d len=%d", total, len(articles))
+		}
+	})
+}
+
 func TestArticleUseCase_LikeArticle(t *testing.T) {
 	uc, ar, _, _, eb := setupArticleUseCase()
 	ctx := ctxWithUser(1)

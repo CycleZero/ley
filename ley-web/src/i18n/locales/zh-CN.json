@@ -1,0 +1,31 @@
+{
+  "site": {
+    "title": "Ley",
+    "subtitle": "个人博客"
+  },
+  "nav": {
+    "home": "首页",
+    "articles": "文章",
+    "categories": "分类",
+    "tags": "标签",
+    "about": "关于",
+    "admin": "管理",
+    "login": "登录",
+    "logout": "退出",
+    "profile": "个人资料"
+  },
+  "common": {
+    "loading": "加载中...",
+    "save": "保存",
+    "cancel": "取消",
+    "delete": "删除",
+    "edit": "编辑",
+    "create": "新建",
+    "search": "搜索",
+    "confirm": "确认",
+    "back": "返回",
+    "success": "操作成功",
+    "error": "操作失败",
+    "noData": "暂无数据"
+  }
+}

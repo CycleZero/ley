@@ -1,0 +1,31 @@
+{
+  "site": {
+    "title": "Ley",
+    "subtitle": "Personal Blog"
+  },
+  "nav": {
+    "home": "Home",
+    "articles": "Articles",
+    "categories": "Categories",
+    "tags": "Tags",
+    "about": "About",
+    "admin": "Admin",
+    "login": "Login",
+    "logout": "Logout",
+    "profile": "Profile"
+  },
+  "common": {
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "create": "Create",
+    "search": "Search",
+    "confirm": "Confirm",
+    "back": "Back",
+    "success": "Success",
+    "error": "Error",
+    "noData": "No data"
+  }
+}

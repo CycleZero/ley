@@ -3,6 +3,7 @@ package biz
 import (
 	"context"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -36,6 +37,7 @@ type mockArticleRepo struct {
 	FindByIDFn   func(ctx context.Context, id uint) (*Article, error)
 	FindBySlugFn func(ctx context.Context, slug string) (*Article, error)
 	ListFn       func(ctx context.Context, query ArticleListQuery) ([]*Article, int64, error)
+	SearchFn     func(ctx context.Context, keyword string, page, pageSize int) ([]*Article, int64, error)
 }
 
 func newMockArticleRepo() *mockArticleRepo {
@@ -94,6 +96,17 @@ func (m *mockArticleRepo) List(ctx context.Context, query ArticleListQuery) ([]*
 	result := make([]*Article, 0)
 	for _, a := range m.articles {
 		if query.AuthorID != nil && a.AuthorID != *query.AuthorID { continue }
+		cp := *a; result = append(result, &cp)
+	}
+	return result, int64(len(result)), nil
+}
+func (m *mockArticleRepo) Search(ctx context.Context, keyword string, page, pageSize int) ([]*Article, int64, error) {
+	if m.SearchFn != nil { return m.SearchFn(ctx, keyword, page, pageSize) }
+	m.mu.Lock(); defer m.mu.Unlock()
+	result := make([]*Article, 0)
+	for _, a := range m.articles {
+		if a.Status != ArticleStatusPublished { continue }
+		if !strings.Contains(a.Title, keyword) && !strings.Contains(a.Content, keyword) { continue }
 		cp := *a; result = append(result, &cp)
 	}
 	return result, int64(len(result)), nil

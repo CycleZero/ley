@@ -1,0 +1,293 @@
+@import "tailwindcss";
+
+/* ===== 设计 Token (Cloudreve 风格) ===== */
+:root {
+  /* 背景层 */
+  --bg-global: #f5f5f5;
+  --bg-card: #ffffff;
+  --bg-input: #f9fafb;
+  --bg-hover: #f3f4f6;
+
+  /* 文字 */
+  --text-primary: #212121;
+  --text-secondary: #616161;
+  --text-tertiary: #9e9e9e;
+
+  /* 品牌色 */
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-subtle: #eff6ff;
+
+  /* 边框 */
+  --border: #e5e7eb;
+  --border-light: #f3f4f6;
+
+  /* 半径 */
+  --radius-xl: 0.75rem;
+  --radius-lg: 0.5rem;
+
+  /* 阴影 */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.08);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08);
+}
+
+[data-theme="dark"] {
+  --bg-global: #212121;
+  --bg-card: #1e1e1e;
+  --bg-input: #374151;
+  --bg-hover: #374151;
+
+  --text-primary: #f3f4f6;
+  --text-secondary: #9ca3af;
+  --text-tertiary: #6b7280;
+
+  --accent: #60a5fa;
+  --accent-hover: #93bbfd;
+  --accent-subtle: #1e3a5f;
+
+  --border: #374151;
+  --border-light: #2d2d2d;
+
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4);
+}
+
+/* ===== 全局基础样式 ===== */
+html {
+  font-family: "Geist", system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg-global);
+  color: var(--text-primary);
+}
+
+/* ===== 自定义滚动条 ===== */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-track:hover {
+  background: var(--border-light);
+}
+::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: #d1d5db;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+/* ===== 工具类 ===== */
+@utility card {
+  border-radius: var(--radius-xl);
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+}
+
+/* ===== 文章正文 Markdown 样式 ===== */
+.markdown-body {
+  font-size: 0.9375rem;
+  line-height: 1.8;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.markdown-body > *:first-child {
+  margin-top: 0 !important;
+}
+.markdown-body > *:last-child {
+  margin-bottom: 0 !important;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  margin: 1.8em 0 0.8em;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.markdown-body h1 {
+  font-size: 1.6em;
+  padding-bottom: 0.4em;
+  border-bottom: 1px solid var(--border-light);
+}
+.markdown-body h2 {
+  font-size: 1.35em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--border-light);
+}
+.markdown-body h3 {
+  font-size: 1.15em;
+}
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  font-size: 1em;
+}
+
+.markdown-body p {
+  margin: 0.9em 0;
+}
+
+.markdown-body a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.markdown-body a:hover {
+  border-bottom-color: var(--accent);
+}
+
+.markdown-body strong {
+  font-weight: 600;
+}
+.markdown-body em {
+  font-style: italic;
+}
+.markdown-body del {
+  color: var(--text-tertiary);
+}
+
+.markdown-body blockquote {
+  margin: 1.2em 0;
+  padding: 0.4em 1em;
+  border-left: 3px solid var(--accent);
+  background: var(--bg-hover);
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+  color: var(--text-secondary);
+}
+.markdown-body blockquote p {
+  margin: 0.4em 0;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  margin: 0.9em 0;
+  padding-left: 1.6em;
+}
+.markdown-body ul {
+  list-style: disc;
+}
+.markdown-body ol {
+  list-style: decimal;
+}
+.markdown-body li {
+  margin: 0.3em 0;
+}
+.markdown-body li::marker {
+  color: var(--text-tertiary);
+}
+.markdown-body input[type="checkbox"] {
+  margin-right: 0.4em;
+  accent-color: var(--accent);
+}
+
+.markdown-body code {
+  font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.875em;
+}
+
+/* 行内代码 */
+.markdown-body :not(pre) > code {
+  padding: 0.15em 0.4em;
+  border-radius: 0.375rem;
+  background: var(--bg-hover);
+  color: var(--accent);
+  border: 1px solid var(--border-light);
+}
+
+/* 代码块 */
+.markdown-body pre {
+  margin: 1.2em 0;
+  padding: 1em 1.2em;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-light);
+  background: var(--bg-input);
+  overflow-x: auto;
+  font-size: 0.85rem;
+  line-height: 1.7;
+}
+.markdown-body pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: inherit;
+}
+.markdown-body .shiki {
+  background: transparent !important;
+}
+.markdown-body .shiki span {
+  color: var(--shiki-light) !important;
+}
+html[data-theme="dark"] .markdown-body .shiki span {
+  color: var(--shiki-dark) !important;
+}
+
+.markdown-body table {
+  width: 100%;
+  margin: 1.2em 0;
+  border-collapse: collapse;
+  font-size: 0.9em;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+}
+.markdown-body th,
+.markdown-body td {
+  padding: 0.55em 0.9em;
+  border: 1px solid var(--border);
+  text-align: left;
+}
+.markdown-body th {
+  background: var(--bg-hover);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.markdown-body tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--bg-hover) 50%, transparent);
+}
+
+.markdown-body hr {
+  margin: 2em 0;
+  border: none;
+  border-top: 1px solid var(--border);
+}
+
+.markdown-body img {
+  max-width: 100%;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-light);
+}
+
+.markdown-body details {
+  margin: 1.2em 0;
+  padding: 0.8em 1em;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+}
+.markdown-body summary {
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.markdown-body kbd {
+  padding: 0.15em 0.5em;
+  border-radius: 0.375rem;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  background: var(--bg-hover);
+  font-family: "Geist Mono", monospace;
+  font-size: 0.8em;
+}
