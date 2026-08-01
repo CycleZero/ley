@@ -11,6 +11,7 @@ import (
 	"github.com/go-kratos/kratos/v2/middleware"
 	"github.com/go-kratos/kratos/v2/transport"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
 const (
@@ -123,6 +124,8 @@ func (j *jwtPaser) GenerateToken(payload Payload) (string, error) {
 			ExpiresAt: jwt.NewNumericDate(expireTime),
 			IssuedAt:  jwt.NewNumericDate(nowTime),
 			Issuer:    j.config.Issuer,
+			// jti 保证同一秒内签发的 token 也互不相同（轮换机制依赖此唯一性）
+			ID: uuid.NewString(),
 		},
 	}
 
@@ -151,6 +154,7 @@ func (j *jwtPaser) GenerateTokenPair(payload Payload) (*TokenPair, error) {
 			ExpiresAt: jwt.NewNumericDate(refreshExpireTime),
 			IssuedAt:  jwt.NewNumericDate(nowTime),
 			Issuer:    j.config.Issuer,
+			ID:        uuid.NewString(),
 		},
 	}
 

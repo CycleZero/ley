@@ -111,21 +111,23 @@ func IsPrivateIp(ip string) bool {
 	}
 
 	// 特殊 IPv4 范围检查
-	if parsedIp.To4() != nil {
+	// 注意：必须用 To4() 后的 4 字节切片判断——ParseIP 返回 16 字节形式，
+	// 直接访问 parsedIp[0] 对 IPv4 恒为 0，会把所有公网 IPv4 误判为私有
+	if ip4 := parsedIp.To4(); ip4 != nil {
 		// 0.0.0.0/8
-		if parsedIp[0] == 0 {
+		if ip4[0] == 0 {
 			return true
 		}
 		// 169.254.0.0/16 (链路本地)
-		if parsedIp[0] == 169 && parsedIp[1] == 254 {
+		if ip4[0] == 169 && ip4[1] == 254 {
 			return true
 		}
 		// 224.0.0.0/4 (组播)
-		if parsedIp[0] >= 224 && parsedIp[0] <= 239 {
+		if ip4[0] >= 224 && ip4[0] <= 239 {
 			return true
 		}
 		// 240.0.0.0/4 (保留)
-		if parsedIp[0] >= 240 {
+		if ip4[0] >= 240 {
 			return true
 		}
 	}
