@@ -36,6 +36,13 @@ service ArticleService {
     option (google.api.http) = { delete: "/api/v1/articles/{id}" };
     option (openapi.v3.operation) = { summary: "删除文章" description: "软删除文章，已发布文章会同步调整分类和标签的计数" tags: "文章" };
   }
+  // 注意：SearchArticles 必须声明在 GetArticle 之前——
+  // Kratos HTTP 路由按 proto 声明顺序注册（gorilla/mux 先注册先匹配），
+  // 若 GetArticle 的 /articles/{identifier} 模板先注册，会吞掉 /articles/search 精确路径
+  rpc SearchArticles(SearchArticlesRequest) returns (SearchArticlesReply) {
+    option (google.api.http) = { get: "/api/v1/articles/search" };
+    option (openapi.v3.operation) = { summary: "全文搜索" description: "关键词搜索文章标题/摘要/正文，仅返回已发布文章" tags: "文章" };
+  }
   rpc GetArticle(GetArticleRequest) returns (GetArticleReply) {
     option (google.api.http) = { get: "/api/v1/articles/{identifier}" };
     option (openapi.v3.operation) = { summary: "获取文章" description: "按ID或Slug获取文章详情，认证用户会填充点赞状态" tags: "文章" };
@@ -51,10 +58,6 @@ service ArticleService {
   rpc ArchiveArticle(ArchiveArticleRequest) returns (ArchiveArticleReply) {
     option (google.api.http) = { post: "/api/v1/articles/{id}/archive" body: "*" };
     option (openapi.v3.operation) = { summary: "归档文章" description: "将文章归档（不展示在默认列表），减少分类和标签计数" tags: "文章" };
-  }
-  rpc SearchArticles(SearchArticlesRequest) returns (SearchArticlesReply) {
-    option (google.api.http) = { get: "/api/v1/articles/search" };
-    option (openapi.v3.operation) = { summary: "全文搜索" description: "预留接口，后续接入搜索引擎" tags: "文章" };
   }
   rpc LikeArticle(LikeArticleRequest) returns (LikeArticleReply) {
     option (google.api.http) = { post: "/api/v1/articles/{id}/like" body: "*" };

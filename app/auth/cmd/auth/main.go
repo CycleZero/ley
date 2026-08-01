@@ -15,6 +15,7 @@ import (
 	"github.com/go-kratos/kratos/v2"
 	"github.com/go-kratos/kratos/v2/config"
 	"github.com/go-kratos/kratos/v2/config/file"
+	kratosjson "github.com/go-kratos/kratos/v2/encoding/json"
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/go-kratos/kratos/v2/middleware/tracing"
 	"github.com/go-kratos/kratos/v2/registry"
@@ -37,6 +38,9 @@ var (
 
 func init() {
 	flag.StringVar(&flagconf, "conf", conf.LocalConfigDir, "config path, eg: -conf config.yaml")
+
+	// JSON 输出使用 proto 字段原名（snake_case），与前端 API 契约对齐
+	kratosjson.MarshalOptions.UseProtoNames = true
 }
 
 func newApp(

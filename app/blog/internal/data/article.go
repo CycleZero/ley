@@ -325,7 +325,8 @@ func (r *articleRepo) Search(ctx context.Context, keyword string, page, pageSize
 
 	db := r.data.db.WithContext(ctx).Preload("Tags").
 		Where("status = ?", statusToInt("published")).
-		Where("title LIKE ? ESCAPE '\\' OR excerpt LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\'", pattern, pattern, pattern)
+		// ESCAPE '\\'（SQL 文本）在 MySQL 与 PostgreSQL 中都是合法的单反斜杠转义写法
+		Where("title LIKE ? ESCAPE '\\\\' OR excerpt LIKE ? ESCAPE '\\\\' OR content LIKE ? ESCAPE '\\\\'", pattern, pattern, pattern)
 
 	// 统计总数
 	var total int64
