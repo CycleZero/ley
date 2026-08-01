@@ -1,4 +1,4 @@
-import ReactMarkdown from "react-markdown";
+import { MarkdownHooks } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeShiki from "@shikijs/rehype";
 
@@ -13,11 +13,14 @@ const LANGUAGES = [
 /**
  * 文章正文渲染：Markdown + GFM + Shiki 代码高亮（双主题适配亮/暗）
  * 样式见 globals.css 的 .markdown-body
+ *
+ * 注意：必须用 MarkdownHooks（异步渲染）——默认导出的 Markdown 是同步的，
+ * 无法处理 @shikijs/rehype 这类异步 rehype 插件（会抛 runSync finished async）。
  */
 export function ArticleContent({ content }: { content: string }) {
   return (
     <div className="markdown-body">
-      <ReactMarkdown
+      <MarkdownHooks
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[
           [
@@ -32,7 +35,7 @@ export function ArticleContent({ content }: { content: string }) {
         ]}
       >
         {content}
-      </ReactMarkdown>
+      </MarkdownHooks>
     </div>
   );
 }

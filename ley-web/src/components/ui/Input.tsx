@@ -1,4 +1,4 @@
-import { forwardRef, type InputHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
+import { cloneElement, forwardRef, isValidElement, useId, type InputHTMLAttributes, type ReactElement, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
 const baseField =
@@ -41,7 +41,7 @@ export function Label({ className, children, ...props }: React.LabelHTMLAttribut
   );
 }
 
-/** 带标签 + 错误提示的表单字段包装 */
+/** 带标签 + 错误提示的表单字段包装（Label 通过 useId 与控件关联） */
 export function Field({
   label,
   error,
@@ -53,10 +53,16 @@ export function Field({
   hint?: string;
   children: React.ReactNode;
 }) {
+  const fieldId = useId();
   return (
     <div>
-      {label && <Label>{label}</Label>}
-      {children}
+      {label && <Label htmlFor={fieldId}>{label}</Label>}
+      {/* 注入 id 使 label 可点击聚焦、可被 getByLabelText 查询（已有 id 则保留） */}
+      {isValidElement(children)
+        ? cloneElement(children as ReactElement<{ id?: string }>, {
+            id: (children.props as { id?: string } | undefined)?.id ?? fieldId,
+          })
+        : children}
       {error ? (
         <p className="mt-1.5 text-xs text-red-500">{error}</p>
       ) : hint ? (

@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { resolve } from "path";
@@ -34,5 +35,13 @@ export default defineConfig({
         },
       },
     },
+  },
+  test: {
+    environment: "jsdom",
+    globals: true,
+    setupFiles: ["./src/test/setup.ts"],
+    css: false,
+    // Shiki 语言加载在并行 worker 下较慢，放宽单测超时
+    testTimeout: 30_000,
   },
 });
