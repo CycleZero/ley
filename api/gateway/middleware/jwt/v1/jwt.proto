@@ -42,4 +42,16 @@ message JWT {
     
     // etcd watch 超时，默认 5s
     google.protobuf.Duration etcd_dial_timeout = 9;
+
+    // ========== 吊销黑名单（可选；登出/轮换后的 access token 即时失效） ==========
+    // 黑名单 Redis 地址，如 "127.0.0.1:6379"。
+    // 须与 Auth 服务共用同一 Redis 实例与库（Auth 将黑名单写入 jwt:blacklist:*）。
+    // 为空则不启用黑名单校验（保持向后兼容）。
+    string redis_addr = 10;
+
+    // 黑名单 Redis 库号，默认 0（与 Auth 服务黑名单所在库一致）
+    int32 redis_db = 11;
+
+    // 黑名单 Redis 密码（可选）
+    string redis_password = 12;
 }

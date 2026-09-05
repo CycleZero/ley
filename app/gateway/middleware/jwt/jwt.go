@@ -2,7 +2,7 @@ package jwt
 
 import (
 	"context"
-	"fmt"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -11,6 +11,7 @@ import (
 
 	config "github.com/CycleZero/ley/api/gateway/config/v1"
 	"github.com/CycleZero/ley/api/gateway/middleware/jwt/v1"
+	"github.com/CycleZero/ley/pkg/cache"
 	jwtpkg "github.com/CycleZero/ley/pkg/jwt"
 	"github.com/CycleZero/ley/pkg/meta"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -33,8 +34,9 @@ type jwtHolder struct {
 }
 
 type jwtInstance struct {
-	jwt    jwtpkg.JWT
-	config *v1.JWT
+	jwt       jwtpkg.JWT
+	config    *v1.JWT
+	blacklist jwtpkg.BlackListCache
 }
 
 func (h *jwtHolder) get() *jwtInstance {
@@ -51,17 +53,12 @@ func (h *jwtHolder) set(inst *jwtInstance) {
 
 // Middleware returns a JWT auth middleware.
 func Middleware(c *config.Middleware) (middleware.Middleware, error) {
-	fmt.Println("[JWT] Middleware factory called, enabled=", c.Options == nil)
-
 	options := &v1.JWT{}
 	if c.Options != nil {
 		if err := anypb.UnmarshalTo(c.Options, options, proto.UnmarshalOptions{Merge: true}); err != nil {
-			fmt.Println("[JWT] Failed to parse options:", err)
 			return nil, err
 		}
 	}
-
-	fmt.Println("[JWT] Parsed options: enabled=", options.Enabled, "etcd=", options.EtcdEndpoints, "key=", options.EtcdKeyPath, "skip=", options.SkipPaths)
 
 	if !options.Enabled {
 		return func(next http.RoundTripper) http.RoundTripper {
@@ -69,11 +66,16 @@ func Middleware(c *config.Middleware) (middleware.Middleware, error) {
 		}, nil
 	}
 
+	blacklist, err := newBlacklist(options)
+	if err != nil {
+		return nil, err
+	}
+
 	holder := &jwtHolder{}
 
 	if options.EtcdEndpoints != "" && options.EtcdKeyPath != "" {
 		// etcd 动态密钥源
-		if _, err := loadEtcdConfig(options, holder); err != nil {
+		if _, err := loadEtcdConfig(options, holder, blacklist); err != nil {
 			return nil, err
 		}
 		logger.Infow("msg", "JWT middleware initialized with etcd",
@@ -94,7 +96,8 @@ func Middleware(c *config.Middleware) (middleware.Middleware, error) {
 				Issuer:      options.Issuer,
 				ExpiredTime: expires,
 			}),
-			config: options,
+			config:    options,
+			blacklist: blacklist,
 		})
 		logger.Infow("msg", "JWT middleware initialized with static config", "skip_paths", options.SkipPaths)
 	}
@@ -102,7 +105,7 @@ func Middleware(c *config.Middleware) (middleware.Middleware, error) {
 	return buildHandler(options, holder), nil
 }
 
-func loadEtcdConfig(options *v1.JWT, holder *jwtHolder) (*clientv3.Client, error) {
+func loadEtcdConfig(options *v1.JWT, holder *jwtHolder, blacklist jwtpkg.BlackListCache) (*clientv3.Client, error) {
 	dialTimeout := 5 * time.Second
 	if options.EtcdDialTimeout != nil {
 		dialTimeout = options.EtcdDialTimeout.AsDuration()
@@ -126,8 +129,9 @@ func loadEtcdConfig(options *v1.JWT, holder *jwtHolder) (*clientv3.Client, error
 	}
 
 	holder.set(&jwtInstance{
-		jwt:    jwtpkg.NewJWT(ecfg.ToJWTConfig()),
-		config: options,
+		jwt:       jwtpkg.NewJWT(ecfg.ToJWTConfig()),
+		config:    options,
+		blacklist: blacklist,
 	})
 
 	// 启动 watch 热更新
@@ -135,8 +139,9 @@ func loadEtcdConfig(options *v1.JWT, holder *jwtHolder) (*clientv3.Client, error
 		ch := jwtpkg.WatchEtcdJWTConfig(context.Background(), etcdClient, options.EtcdKeyPath)
 		for ecfg := range ch {
 			holder.set(&jwtInstance{
-				jwt:    jwtpkg.NewJWT(ecfg.ToJWTConfig()),
-				config: options,
+				jwt:       jwtpkg.NewJWT(ecfg.ToJWTConfig()),
+				config:    options,
+				blacklist: blacklist,
 			})
 			logger.Infow("msg", "JWT config hot-reloaded from etcd")
 		}
@@ -158,12 +163,10 @@ func buildHandler(options *v1.JWT, holder *jwtHolder) middleware.Middleware {
 
 	return func(next http.RoundTripper) http.RoundTripper {
 		return middleware.RoundTripperFunc(func(req *http.Request) (*http.Response, error) {
-			fmt.Println("[JWT] REQ path=", req.URL.Path)
 			_, shouldSkip := skipPaths[req.URL.Path]
 
 			authHeader := req.Header.Get("Authorization")
 			if authHeader == "" {
-				fmt.Println("[JWT] missing auth header, path=", req.URL.Path, "skip=", shouldSkip)
 				if !shouldSkip && required {
 					return newUnauthorizedResponse(req, "missing authorization header"), nil
 				}
@@ -172,7 +175,6 @@ func buildHandler(options *v1.JWT, holder *jwtHolder) middleware.Middleware {
 
 			tokenString := extractToken(authHeader)
 			if tokenString == "" {
-				fmt.Println("[JWT] bad header format, path=", req.URL.Path, "skip=", shouldSkip)
 				if !shouldSkip && required {
 					return newUnauthorizedResponse(req, "invalid authorization header format"), nil
 				}
@@ -181,38 +183,63 @@ func buildHandler(options *v1.JWT, holder *jwtHolder) middleware.Middleware {
 
 			inst := holder.get()
 			if inst == nil {
-				fmt.Println("[JWT] holder nil, path=", req.URL.Path)
 				return newUnauthorizedResponse(req, "jwt auth service not ready"), nil
 			}
 
 			claims, err := inst.jwt.ParseAccessToken(tokenString)
 			if err != nil {
-				fmt.Println("[JWT] token invalid, path=", req.URL.Path, "err=", err, "skip=", shouldSkip)
 				if !shouldSkip && required {
 					return newUnauthorizedResponse(req, "invalid or expired token"), nil
 				}
 				return next.RoundTrip(req)
 			}
 
-			fmt.Println("[JWT] OK: uid=", claims.UserId, "user=", claims.UserName, "path=", req.URL.Path)
+			// B-101: access token 已被吊销（登出/轮换黑名单）时，无论 required/skip 一律拒绝，
+			// 保证「登出后令牌不可再使用」的契约。
+			if isRevoked(inst.blacklist, tokenString) {
+				return newUnauthorizedResponse(req, "token has been revoked"), nil
+			}
 
 			req.Header.Set(meta.AuthUserIDKey, strconv.FormatUint(claims.UserId, 10))
 			req.Header.Set(meta.AuthUserNameKey, claims.UserName)
-
-			ctx := req.Context()
-			ctx = context.WithValue(ctx, "user_id", claims.UserId)
-			ctx = context.WithValue(ctx, "user_name", claims.UserName)
+			if claims.Role != "" {
+				req.Header.Set(meta.AuthUserRoleKey, claims.Role)
+			}
 
 			reqMeta := &meta.RequestMetaData{
 				Auth: meta.Auth{
 					UserID:   claims.UserId,
 					UserName: claims.UserName,
+					Role:     claims.Role,
 				},
 			}
-			ctx = meta.NewClientCtx(ctx, reqMeta)
+			ctx := meta.NewClientCtx(req.Context(), reqMeta)
 			return next.RoundTrip(req.WithContext(ctx))
 		})
 	}
+}
+
+// newBlacklist 依据 options 构建吊销黑名单检查器。
+// 未配置 redis_addr 时返回 nil（不启用黑名单校验，向后兼容）。
+func newBlacklist(options *v1.JWT) (jwtpkg.BlackListCache, error) {
+	if options.RedisAddr == "" {
+		return nil, nil
+	}
+	host, portStr, err := net.SplitHostPort(options.RedisAddr)
+	if err != nil {
+		return nil, errUnauthorized("jwt middleware: invalid redis_addr: " + err.Error())
+	}
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return nil, errUnauthorized("jwt middleware: invalid redis_addr port: " + err.Error())
+	}
+	c := cache.NewRedisCache(host, port, options.RedisPassword, int(options.RedisDb))
+	return jwtpkg.NewBlackList(c), nil
+}
+
+// isRevoked 判断 token 是否已被吊销
+func isRevoked(bl jwtpkg.BlackListCache, token string) bool {
+	return bl != nil && bl.IsEnabled() && bl.IsTokenBlackListed(token)
 }
 
 func extractToken(authHeader string) string {
