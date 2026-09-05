@@ -11,6 +11,7 @@ import (
 
 	kerrors "github.com/go-kratos/kratos/v2/errors"
 	"github.com/go-kratos/kratos/v2/log"
+	"github.com/google/uuid"
 )
 
 // =============================================================================
@@ -47,6 +48,8 @@ type FileRepo interface {
 	Delete(ctx context.Context, id uint) error
 	List(ctx context.Context, userID uint, page, pageSize int) ([]*File, int64, error)
 	GetPresignedPutURL(ctx context.Context, key, mimeType string, expireSeconds int64) (string, error)
+	// RegisterPresignedObject 登记已直传 MinIO 的对象：实测对象存在与大小后落库
+	RegisterPresignedObject(ctx context.Context, file *File) error
 }
 
 // =============================================================================
@@ -491,3 +494,79 @@ func randomHex(n int) string {
 }
 
 var hexChars = "0123456789abcdef"
+
+// =============================================================================
+// 预签名直传闭环（B-111）
+//
+// 流程：CreatePresignedUpload（鉴权 + 元数据校验 + 服务端签发对象键）
+//     → 客户端 PUT 直传 MinIO
+//     → CompletePresignedUpload（实测对象存在与大小 → 登记 files 记录）
+// =============================================================================
+
+const (
+	presignedKeyPrefix     = "uploads/"
+	presignedExpireSeconds = int64(3600)
+	maxPresignedFileSize   = int64(MaxAttachSize) // 直传面向超大文件，放宽到附件上限 50MB
+)
+
+// CreatePresignedUpload 创建预签名直传会话（须登录）。
+// 校验文件名清理/扩展名/MIME/大小后，由服务端生成 uploads/{yyyyMMdd}/{uuid}{ext}
+// 对象键（客户端无法指定任意路径），返回 MinIO 预签名 PUT URL。
+func (uc *FileUseCase) CreatePresignedUpload(ctx context.Context, filename, mimeType string, size int64) (string, string, error) {
+	if _, err := getCurrentUserID(ctx); err != nil {
+		return "", "", err
+	}
+
+	baseName := filepath.Base(filepath.Clean(filename))
+	if baseName == "." || baseName == ".." || baseName == "" {
+		return "", "", ErrInvalidFilename
+	}
+	ext := strings.ToLower(filepath.Ext(baseName))
+	if !allowedExtensions[ext] {
+		return "", "", ErrExtensionNotAllowed
+	}
+	if !allowedMimeTypes[mimeType] {
+		return "", "", ErrMimeNotAllowed
+	}
+	if size <= 0 || size > maxPresignedFileSize {
+		return "", "", ErrFileTooLarge
+	}
+
+	key := fmt.Sprintf("%s%s_%s%s", presignedKeyPrefix, time.Now().Format("20060102"),
+		uuid.Must(uuid.NewV7()).String(), ext)
+	url, err := uc.repo.GetPresignedPutURL(ctx, key, mimeType, presignedExpireSeconds)
+	if err != nil {
+		return "", "", fmt.Errorf("create presigned upload: %w", err)
+	}
+	return url, key, nil
+}
+
+// CompletePresignedUpload 完成预签名直传（须登录）。
+// 仅接受本服务签发（uploads/ 前缀）的对象键，并再次校验客户端重传的文件名/MIME；
+// data 层通过 StatObject 实测对象存在与真实大小后登记 files 记录。
+func (uc *FileUseCase) CompletePresignedUpload(ctx context.Context, objectKey, filename, mimeType string) (*File, error) {
+	userID, err := getCurrentUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !strings.HasPrefix(objectKey, presignedKeyPrefix) {
+		return nil, ErrInvalidFilename
+	}
+
+	baseName := filepath.Base(filepath.Clean(filename))
+	if baseName == "." || baseName == ".." || baseName == "" {
+		return nil, ErrInvalidFilename
+	}
+	if !allowedExtensions[strings.ToLower(filepath.Ext(baseName))] {
+		return nil, ErrExtensionNotAllowed
+	}
+	if !allowedMimeTypes[mimeType] {
+		return nil, ErrMimeNotAllowed
+	}
+
+	file := &File{UserID: uint(userID), Filename: baseName, MimeType: mimeType, URL: objectKey}
+	if err := uc.repo.RegisterPresignedObject(ctx, file); err != nil {
+		return nil, err
+	}
+	return file, nil
+}

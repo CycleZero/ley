@@ -183,7 +183,9 @@ func (r *articleRepo) FindByID(ctx context.Context, id uint) (*biz.Article, erro
 		}
 		return nil, fmt.Errorf("find article by id: %w", err)
 	}
-	return articlePOToBiz(&po), nil
+	a := articlePOToBiz(&po)
+	r.enrichAuthorAndCategory(ctx, []*biz.Article{a})
+	return a, nil
 }
 
 // =============================================================================
@@ -228,7 +230,9 @@ func (r *articleRepo) FindBySlug(ctx context.Context, slug string) (*biz.Article
 	// 回写 slug→id 映射缓存
 	_ = r.data.cache.Set(ctx, slugKey, []byte(strconv.Itoa(int(po.ID))), ttlArticle)
 	r.data.log.WithContext(ctx).Debugf("[ArticleRepo.FindBySlug] 命中 slug=%q id=%d", slug, po.ID)
-	return articlePOToBiz(&po), nil
+	a := articlePOToBiz(&po)
+	r.enrichAuthorAndCategory(ctx, []*biz.Article{a})
+	return a, nil
 }
 
 // =============================================================================
@@ -295,6 +299,7 @@ func (r *articleRepo) List(ctx context.Context, query biz.ArticleListQuery) ([]*
 	for i := range pos {
 		articles = append(articles, articlePOToBiz(&pos[i]))
 	}
+	r.enrichAuthorAndCategory(ctx, articles)
 	return articles, total, nil
 }
 
@@ -347,6 +352,7 @@ func (r *articleRepo) Search(ctx context.Context, keyword string, page, pageSize
 	for i := range pos {
 		articles = append(articles, articlePOToBiz(&pos[i]))
 	}
+	r.enrichAuthorAndCategory(ctx, articles)
 	return articles, total, nil
 }
 
@@ -477,6 +483,96 @@ func (r *articleRepo) invalidateCache(ctx context.Context, id uint, slug string)
 // =============================================================================
 // 实体转换
 // =============================================================================
+
+// enrichAuthorAndCategory 批量填充文章的作者显示名/头像与分类名。
+//
+// auth 与 blog 当前同库部署（同一 MySQL ley 实例），作者（users 表，auth 域）与
+// 分类（categories 表）可直查填充；跨域查询失败时仅告警，回退为空的现状行为。
+// 若未来分库，此处需改为经 auth RPC 或事件同步作者快照。
+func (r *articleRepo) enrichAuthorAndCategory(ctx context.Context, articles []*biz.Article) {
+	if len(articles) == 0 {
+		return
+	}
+
+	authorIDs := make([]uint, 0, len(articles))
+	seenAuthor := make(map[uint]struct{}, len(articles))
+	for _, a := range articles {
+		if a == nil {
+			continue
+		}
+		if _, ok := seenAuthor[a.AuthorID]; !ok {
+			seenAuthor[a.AuthorID] = struct{}{}
+			authorIDs = append(authorIDs, a.AuthorID)
+		}
+	}
+	if len(authorIDs) > 0 {
+		var users []struct {
+			ID       uint
+			Username string
+			Avatar   string
+		}
+		if err := r.data.db.WithContext(ctx).Table("users").
+			Select("id, username, avatar").
+			Where("id IN ?", authorIDs).
+			Scan(&users).Error; err != nil {
+			r.data.log.WithContext(ctx).Warnf("[ArticleRepo.enrich] 查询作者信息失败 err=%v", err)
+		} else {
+			userMap := make(map[uint]struct {
+				Username string
+				Avatar   string
+			}, len(users))
+			for _, u := range users {
+				userMap[u.ID] = struct {
+					Username string
+					Avatar   string
+				}{Username: u.Username, Avatar: u.Avatar}
+			}
+			for _, a := range articles {
+				if a == nil {
+					continue
+				}
+				if u, ok := userMap[a.AuthorID]; ok {
+					a.AuthorName = u.Username
+					a.AuthorAvatar = u.Avatar
+				}
+			}
+		}
+	}
+
+	catIDs := make([]uint, 0, len(articles))
+	seenCat := make(map[uint]struct{}, len(articles))
+	for _, a := range articles {
+		if a == nil || a.CategoryID == nil {
+			continue
+		}
+		if _, ok := seenCat[*a.CategoryID]; !ok {
+			seenCat[*a.CategoryID] = struct{}{}
+			catIDs = append(catIDs, *a.CategoryID)
+		}
+	}
+	if len(catIDs) > 0 {
+		var cats []struct {
+			ID   uint
+			Name string
+		}
+		if err := r.data.db.WithContext(ctx).Table("categories").
+			Select("id, name").
+			Where("id IN ?", catIDs).
+			Scan(&cats).Error; err != nil {
+			r.data.log.WithContext(ctx).Warnf("[ArticleRepo.enrich] 查询分类信息失败 err=%v", err)
+		} else {
+			catMap := make(map[uint]string, len(cats))
+			for _, c := range cats {
+				catMap[c.ID] = c.Name
+			}
+			for _, a := range articles {
+				if a != nil && a.CategoryID != nil {
+					a.CategoryName = catMap[*a.CategoryID]
+				}
+			}
+		}
+	}
+}
 
 func articlePOToBiz(po *ArticlePO) *biz.Article {
 	a := &biz.Article{

@@ -109,3 +109,25 @@ func (r *fileRepo) List(ctx context.Context, userID uint, page, pageSize int) ([
 func (r *fileRepo) GetPresignedPutURL(ctx context.Context, key, mimeType string, expireSeconds int64) (string, error) {
 	return r.oss.GetPresignedPutURL(ctx, key, mimeType, expireSeconds)
 }
+
+// RegisterPresignedObject 登记已通过预签名 URL 直传 MinIO 的对象：
+// 实测对象存在与真实大小（不信任客户端声明），超限拒绝；通过后落 files 记录。
+func (r *fileRepo) RegisterPresignedObject(ctx context.Context, file *biz.File) error {
+	info, err := r.oss.StatObject(ctx, file.URL)
+	if err != nil {
+		return fmt.Errorf("verify presigned object: %w", err)
+	}
+	if info.Size <= 0 || info.Size > int64(biz.MaxAttachSize) {
+		return biz.ErrFileTooLarge
+	}
+	file.Size = info.Size
+
+	po := &FilePO{Filename: file.Filename, MimeType: file.MimeType, Size: file.Size, URL: file.URL, UserID: file.UserID}
+	if err := r.data.db.WithContext(ctx).Create(po).Error; err != nil {
+		return fmt.Errorf("create presigned file record: %w", err)
+	}
+	file.ID = po.ID
+	file.CreatedAt = po.CreatedAt
+	r.data.log.WithContext(ctx).Infof("[FileRepo.RegisterPresignedObject] 成功 id=%d key=%s size=%d", file.ID, file.URL, file.Size)
+	return nil
+}

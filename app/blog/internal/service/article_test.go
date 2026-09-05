@@ -430,3 +430,35 @@ func articleStatusName(s biz.ArticleStatus) string {
 		return "draft"
 	}
 }
+
+// B-106: CreateArticle 支持 status=published，创建后立即发布并可被公开列表命中
+func TestServiceCreateArticlePublishesImmediately(t *testing.T) {
+	svc := newTestArticleService(t)
+
+	resp, err := svc.CreateArticle(ctxWithUser(1), &blogv1.CreateArticleRequest{
+		Title:   "创建即发布",
+		Content: "正文",
+		Status:  "published",
+	})
+	if err != nil {
+		t.Fatalf("CreateArticle 失败: %v", err)
+	}
+	if resp.Article.Status != "published" {
+		t.Errorf("status=published 创建应返回 published: got %q", resp.Article.Status)
+	}
+
+	list, err := svc.ListArticles(context.Background(), &blogv1.ListArticlesRequest{})
+	if err != nil {
+		t.Fatalf("ListArticles 失败: %v", err)
+	}
+	found := false
+	for _, a := range list.Articles {
+		if a.Id == resp.Article.Id {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("创建即发布的文章应出现在公开列表")
+	}
+}

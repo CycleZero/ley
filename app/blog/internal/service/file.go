@@ -15,6 +15,8 @@ type FileService struct {
 	log *log.Helper
 }
 
+const presignedExpiresIn = int64(3600)
+
 func NewFileService(uc *biz.FileUseCase, logger log.Logger) *FileService {
 	return &FileService{uc: uc, log: log.NewHelper(logger)}
 }
@@ -57,6 +59,22 @@ func (s *FileService) GetPresignedPutURL(ctx context.Context, req *blogv1.GetPre
 		return nil, err
 	}
 	return &blogv1.GetPresignedPutURLReply{Url: url, ObjectKey: key}, nil
+}
+
+func (s *FileService) CreatePresignedUpload(ctx context.Context, req *blogv1.CreatePresignedUploadRequest) (*blogv1.CreatePresignedUploadReply, error) {
+	url, key, err := s.uc.CreatePresignedUpload(ctx, req.Filename, req.MimeType, req.Size)
+	if err != nil {
+		return nil, err
+	}
+	return &blogv1.CreatePresignedUploadReply{PresignedUrl: url, ObjectKey: key, ExpiresIn: presignedExpiresIn}, nil
+}
+
+func (s *FileService) CompletePresignedUpload(ctx context.Context, req *blogv1.CompletePresignedUploadRequest) (*blogv1.CompletePresignedUploadReply, error) {
+	f, err := s.uc.CompletePresignedUpload(ctx, req.ObjectKey, req.Filename, req.MimeType)
+	if err != nil {
+		return nil, err
+	}
+	return &blogv1.CompletePresignedUploadReply{File: toFileInfo(f)}, nil
 }
 
 func toFileInfo(f *biz.File) *blogv1.FileInfo {

@@ -268,3 +268,72 @@ func TestArticleRepo_SyncTags(t *testing.T) {
 		}
 	})
 }
+
+// B-107: data 层须填充作者显示名/头像与分类名（auth/blog 同库部署，直查 users/categories）
+func TestArticleRepo_EnrichesAuthorAndCategory(t *testing.T) {
+	repo, d := setupArticleRepo(t)
+	ctx := context.Background()
+
+	uname := fmt.Sprintf("enrich-%d", time.Now().UnixNano())
+	user := map[string]interface{}{
+		"username": uname,
+		"email":    uname + "@test.dev",
+		"password": "hash-placeholder",
+		"avatar":   "https://cdn.test.dev/avatar.png",
+		"role":     "reader",
+	}
+	if err := d.db.Table("users").Create(user).Error; err != nil {
+		t.Fatalf("种入测试用户失败: %v", err)
+	}
+	var uid int64
+	if err := d.db.Table("users").Select("id").Where("username = ?", uname).Scan(&uid).Error; err != nil {
+		t.Fatalf("查询测试用户 ID 失败: %v", err)
+	}
+	authorID := uint(uid)
+	t.Cleanup(func() { d.db.Table("users").Where("id = ?", authorID).Delete(nil) })
+
+	catSlug := uniSlug(t, "cat")
+	cat := &CategoryPO{Name: "测试分类" + uname, Slug: catSlug, SortOrder: 0}
+	if err := d.db.Create(cat).Error; err != nil {
+		t.Fatalf("种入分类失败: %v", err)
+	}
+	t.Cleanup(func() { d.db.Delete(cat) })
+
+	a := createTestArticle(t, repo, "富化测试", uniSlug(t, "enrich-article"), authorID)
+	catID := cat.ID
+	a.CategoryID = &catID
+	if err := repo.(interface {
+		Update(ctx context.Context, a *biz.Article) error
+	}).Update(ctx, a); err != nil {
+		t.Fatalf("更新文章分类失败: %v", err)
+	}
+
+	got, err := repo.FindByID(ctx, a.ID)
+	if err != nil {
+		t.Fatalf("FindByID 失败: %v", err)
+	}
+	if got.AuthorName != uname {
+		t.Errorf("AuthorName 未填充: got %q want %q", got.AuthorName, uname)
+	}
+	if got.AuthorAvatar != "https://cdn.test.dev/avatar.png" {
+		t.Errorf("AuthorAvatar 未填充: got %q", got.AuthorAvatar)
+	}
+	if got.CategoryName != cat.Name {
+		t.Errorf("CategoryName 未填充: got %q want %q", got.CategoryName, cat.Name)
+	}
+
+	list, total, err := repo.List(ctx, biz.ArticleListQuery{Status: "", AuthorID: &authorID})
+	if err != nil {
+		t.Fatalf("List 失败: %v", err)
+	}
+	if total < 1 {
+		t.Fatalf("列表应包含文章: total=%d", total)
+	}
+	for _, item := range list {
+		if item.ID == a.ID {
+			if item.AuthorName != uname || item.CategoryName != cat.Name {
+				t.Errorf("列表项未富化: author=%q cat=%q", item.AuthorName, item.CategoryName)
+			}
+		}
+	}
+}

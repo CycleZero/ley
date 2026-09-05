@@ -26,6 +26,14 @@ func (s *ArticleService) CreateArticle(ctx context.Context, req *blogv1.CreateAr
 	if err != nil {
 		return nil, err
 	}
+	// B-106: status=published 时创建后立即发布（复用 PublishArticle 的完整发布流程）
+	if req.Status == "published" {
+		published, err := s.uc.PublishArticle(ctx, a.ID)
+		if err != nil {
+			return nil, err
+		}
+		a = published
+	}
 	return &blogv1.CreateArticleReply{Article: toArticleInfo(a)}, nil
 }
 

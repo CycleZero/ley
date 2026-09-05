@@ -129,6 +129,14 @@ service FileService {
     option (google.api.http) = { get: "/api/v1/files/presigned-upload" };
     option (openapi.v3.operation) = { summary: "获取预签名上传URL" description: "获取MinIO预签名上传URL（1小时有效），客户端可直接上传" tags: "文件" };
   }
+  rpc CreatePresignedUpload(CreatePresignedUploadRequest) returns (CreatePresignedUploadReply) {
+    option (google.api.http) = { post: "/api/v1/files/presigned-uploads" body: "*" };
+    option (openapi.v3.operation) = { summary: "创建预签名上传" description: "校验文件名/类型/大小后签发 MinIO 预签名直传 URL（对象键由服务端生成，须登录）" tags: "文件" };
+  }
+  rpc CompletePresignedUpload(CompletePresignedUploadRequest) returns (CompletePresignedUploadReply) {
+    option (google.api.http) = { post: "/api/v1/files/presigned-uploads/complete" body: "*" };
+    option (openapi.v3.operation) = { summary: "完成预签名上传" description: "客户端直传 MinIO 后登记文件记录（须登录；仅接受本服务签发的 uploads/ 前缀对象键）" tags: "文件" };
+  }
 }
 
 service SiteService {
@@ -170,7 +178,7 @@ service SiteService {
 // 消息定义
 // =============================================================================
 
-message CreateArticleRequest { string title = 1; string content = 2; string excerpt = 3; string cover_image = 4; uint64 category_id = 5; repeated string tag_names = 6; }
+message CreateArticleRequest { string title = 1; string content = 2; string excerpt = 3; string cover_image = 4; uint64 category_id = 5; repeated string tag_names = 6; string status = 7; } // status: draft(默认) / published（创建后立即发布）
 message CreateArticleReply { ArticleInfo article = 1; }
 message UpdateArticleRequest { uint64 id = 1; string title = 2; string content = 3; string excerpt = 4; string cover_image = 5; uint64 category_id = 6; repeated string tag_names = 7; }
 message UpdateArticleReply { ArticleInfo article = 1; }
@@ -221,6 +229,10 @@ message ListFilesRequest { int32 page = 1; int32 page_size = 2; }
 message ListFilesReply { repeated FileInfo files = 1; int64 total = 2; }
 message GetPresignedPutURLRequest { string filename = 1; string mime_type = 2; }
 message GetPresignedPutURLReply { string url = 1; string object_key = 2; }
+message CreatePresignedUploadRequest { string filename = 1; string mime_type = 2; int64 size = 3; }
+message CreatePresignedUploadReply { string presigned_url = 1; string object_key = 2; int64 expires_in = 3; }
+message CompletePresignedUploadRequest { string object_key = 1; string filename = 2; string mime_type = 3; }
+message CompletePresignedUploadReply { FileInfo file = 1; }
 
 message GetSiteConfigRequest {}
 message GetSiteConfigReply { SiteConfig config = 1; }
