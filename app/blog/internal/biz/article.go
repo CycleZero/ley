@@ -171,6 +171,7 @@ var (
 	ErrArticleAlreadyPublished = kerrors.Conflict("ALREADY_PUBLISHED", "文章已发布")
 	ErrSlugAlreadyExists       = kerrors.Conflict("SLUG_ALREADY_EXISTS", "Slug 已被占用")
 	ErrUserNotAuthenticated    = kerrors.Unauthorized("NOT_AUTHENTICATED", "用户未认证")
+	ErrPermissionDenied        = kerrors.Forbidden("PERMISSION_DENIED", "权限不足，需要管理员")
 )
 
 // =============================================================================
@@ -182,6 +183,9 @@ const (
 	MaxTitleLength   = 200    // 标题最大字符数
 	MaxContentLength = 100000 // 内容最大字符数
 	MaxExcerptLength = 500    // 摘要最大字符数（自动截断时使用）
+
+	// adminRole 管理员角色标识（与 auth 服务 RoleAdmin 一致，随 JWT claim 透传）
+	adminRole = "admin"
 )
 
 // =============================================================================
@@ -719,6 +723,22 @@ func (uc *ArticleUseCase) ArchiveArticle(ctx context.Context, id uint) (*Article
 // 查询成功后填充当前用户的点赞状态。
 // =============================================================================
 
+// ensureArticleVisible 校验文章对当前请求者可见：
+// 已发布对所有可见；草稿/归档仅作者本人或管理员可见（他人返回 404，隐藏存在性）。
+func (uc *ArticleUseCase) ensureArticleVisible(ctx context.Context, article *Article) error {
+	if article.Status == ArticleStatusPublished {
+		return nil
+	}
+	userID, err := getCurrentUserID(ctx)
+	if err != nil {
+		return ErrArticleNotFound
+	}
+	if article.AuthorID == uint(userID) || getCurrentRole(ctx) == adminRole {
+		return nil
+	}
+	return ErrArticleNotFound
+}
+
 func (uc *ArticleUseCase) GetArticle(ctx context.Context, identifier string) (*Article, error) {
 	uc.log.WithContext(ctx).Debugf("[GetArticle] 开始 identifier=%q", identifier)
 
@@ -731,6 +751,10 @@ func (uc *ArticleUseCase) GetArticle(ctx context.Context, identifier string) (*A
 		article, err := uc.repo.FindByID(ctx, id)
 		if err == nil {
 			uc.log.WithContext(ctx).Debugf("[GetArticle] ID查询命中 id=%d title=%q status=%d", id, article.Title, article.Status)
+			// B-105: 草稿/归档仅作者或管理员可见
+			if err := uc.ensureArticleVisible(ctx, article); err != nil {
+				return nil, err
+			}
 			// 填充当前用户是否已点赞（未认证用户跳过）
 			uc.fillIsLiked(ctx, article)
 			return article, nil
@@ -751,6 +775,10 @@ func (uc *ArticleUseCase) GetArticle(ctx context.Context, identifier string) (*A
 	}
 
 	uc.log.WithContext(ctx).Debugf("[GetArticle] Slug查询命中 slug=%q id=%d title=%q", identifier, article.ID, article.Title)
+	// B-105: 草稿/归档仅作者或管理员可见
+	if err := uc.ensureArticleVisible(ctx, article); err != nil {
+		return nil, err
+	}
 	uc.fillIsLiked(ctx, article)
 	return article, nil
 }
@@ -765,6 +793,19 @@ func (uc *ArticleUseCase) GetArticle(ctx context.Context, identifier string) (*A
 func (uc *ArticleUseCase) ListArticles(ctx context.Context, query ArticleListQuery) ([]*Article, int64, error) {
 	uc.log.WithContext(ctx).Debugf("[ListArticles] 开始 status=%q page=%d page_size=%d sort_by=%s sort_order=%s category_id=%v author_id=%v tags=%v",
 		query.Status, query.Page, query.PageSize, query.SortBy, query.SortOrder, query.CategoryID, query.AuthorID, query.Tags)
+
+	// B-105: 非已发布状态的列表仅限 admin，或作者本人按 author_id=self 查询；
+	// 防止匿名/他人枚举草稿与归档。
+	if query.Status != "" && query.Status != "published" {
+		userID, err := getCurrentUserID(ctx)
+		if err != nil {
+			return nil, 0, ErrPermissionDenied
+		}
+		isSelf := query.AuthorID != nil && *query.AuthorID == uint(userID)
+		if !isSelf && getCurrentRole(ctx) != adminRole {
+			return nil, 0, ErrPermissionDenied
+		}
+	}
 
 	// 如果未指定状态，默认只返回已发布文章
 	if query.Status == "" {
@@ -1000,8 +1041,8 @@ func (uc *ArticleUseCase) authorizeArticle(ctx context.Context, id uint) (*Artic
 	}
 	uc.log.WithContext(ctx).Debugf("[authorizeArticle] 文章找到 author_id=%d status=%d", article.AuthorID, article.Status)
 
-	// 验证作者身份
-	if article.AuthorID != uint(userID) {
+	// 验证作者身份（admin 可操作任何文章）
+	if article.AuthorID != uint(userID) && getCurrentRole(ctx) != adminRole {
 		uc.log.WithContext(ctx).Warnf("[authorizeArticle] 权限拒绝 article_id=%d author=%d requester=%d",
 			id, article.AuthorID, userID)
 		return nil, ErrNotArticleOwner
@@ -1268,6 +1309,19 @@ func getCurrentUserID(ctx context.Context) (uint64, error) {
 		return reqMeta.Auth.UserID, nil
 	}
 	return 0, ErrUserNotAuthenticated
+}
+
+// getCurrentRole 返回当前用户角色（由网关注入 x-md-global-auth-user-role；匿名/未认证为空串）
+func getCurrentRole(ctx context.Context) string {
+	return meta.GetRequestMetaData(ctx).Auth.Role
+}
+
+// requireAdmin 校验当前用户具备管理员角色（站点管理类写操作入口）
+func requireAdmin(ctx context.Context) error {
+	if getCurrentRole(ctx) != adminRole {
+		return ErrPermissionDenied
+	}
+	return nil
 }
 
 // parseUint 尝试将字符串解析为无符号整数

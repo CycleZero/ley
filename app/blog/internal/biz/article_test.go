@@ -313,3 +313,100 @@ func TestArticleUseCase_LikeArticle(t *testing.T) {
 
 	_ = eb
 }
+
+// B-105: 草稿/归档仅作者或管理员可见（详情 + 列表两层校验）
+func TestArticleUseCase_GetArticleVisibility(t *testing.T) {
+	uc, _, _, _, _ := setupArticleUseCase()
+	ctxAuthor := ctxWithUser(1)
+	ctxOther := ctxWithRole(2, "reader")
+	ctxAdmin := ctxWithRole(9, "admin")
+
+	draft, err := uc.CreateArticle(ctxAuthor, "DraftOnly", "content", "", "", nil, nil)
+	if err != nil {
+		t.Fatalf("CreateArticle 失败: %v", err)
+	}
+
+	t.Run("anonymous cannot read draft", func(t *testing.T) {
+		if _, err := uc.GetArticle(context.Background(), "1"); err != ErrArticleNotFound {
+			t.Errorf("匿名读草稿应 404: got %v", err)
+		}
+	})
+	t.Run("other reader cannot read draft", func(t *testing.T) {
+		if _, err := uc.GetArticle(ctxOther, "1"); err != ErrArticleNotFound {
+			t.Errorf("非作者读草稿应 404: got %v", err)
+		}
+	})
+	t.Run("author can read own draft", func(t *testing.T) {
+		a, err := uc.GetArticle(ctxAuthor, "1")
+		if err != nil || a.ID != draft.ID {
+			t.Errorf("作者读自己草稿应成功: err=%v id=%d", err, draft.ID)
+		}
+	})
+	t.Run("admin can read others draft", func(t *testing.T) {
+		a, err := uc.GetArticle(ctxAdmin, "1")
+		if err != nil || a.ID != draft.ID {
+			t.Errorf("admin 读他人草稿应成功: err=%v", err)
+		}
+	})
+
+	pub, err := uc.CreateArticle(ctxAuthor, "PublishedOne", "content", "", "", nil, nil)
+	if err != nil {
+		t.Fatalf("CreateArticle 失败: %v", err)
+	}
+	if _, err := uc.PublishArticle(ctxAuthor, pub.ID); err != nil {
+		t.Fatalf("PublishArticle 失败: %v", err)
+	}
+
+	t.Run("anonymous can read published", func(t *testing.T) {
+		if _, err := uc.GetArticle(context.Background(), "2"); err != nil {
+			t.Errorf("匿名读已发布文章应成功: %v", err)
+		}
+	})
+	t.Run("anonymous cannot read archived", func(t *testing.T) {
+		if _, err := uc.ArchiveArticle(ctxAuthor, pub.ID); err != nil {
+			t.Fatalf("ArchiveArticle 失败: %v", err)
+		}
+		if _, err := uc.GetArticle(context.Background(), "2"); err != ErrArticleNotFound {
+			t.Errorf("匿名读已归档文章应 404: got %v", err)
+		}
+	})
+}
+
+func TestArticleUseCase_ListArticlesVisibility(t *testing.T) {
+	uc, _, _, _, _ := setupArticleUseCase()
+	ctxAuthor := ctxWithUser(1)
+	ctxAdmin := ctxWithRole(9, "admin")
+
+	if _, err := uc.CreateArticle(ctxAuthor, "D1", "content", "", "", nil, nil); err != nil {
+		t.Fatalf("CreateArticle 失败: %v", err)
+	}
+
+	t.Run("anonymous draft list forbidden", func(t *testing.T) {
+		_, _, err := uc.ListArticles(context.Background(), ArticleListQuery{Status: "draft"})
+		if err != ErrPermissionDenied {
+			t.Errorf("匿名列草稿应拒绝: got %v", err)
+		}
+	})
+	t.Run("reader draft list forbidden", func(t *testing.T) {
+		_, _, err := uc.ListArticles(ctxWithRole(2, "reader"), ArticleListQuery{Status: "draft"})
+		if err != ErrPermissionDenied {
+			t.Errorf("reader 列草稿应拒绝: got %v", err)
+		}
+	})
+	t.Run("admin can list drafts", func(t *testing.T) {
+		if _, _, err := uc.ListArticles(ctxAdmin, ArticleListQuery{Status: "draft"}); err != nil {
+			t.Errorf("admin 列草稿应放行: %v", err)
+		}
+	})
+	t.Run("author self drafts ok", func(t *testing.T) {
+		aid := uint(1)
+		if _, _, err := uc.ListArticles(ctxAuthor, ArticleListQuery{Status: "draft", AuthorID: &aid}); err != nil {
+			t.Errorf("作者列自己草稿应放行: %v", err)
+		}
+	})
+	t.Run("anonymous published list ok", func(t *testing.T) {
+		if _, _, err := uc.ListArticles(context.Background(), ArticleListQuery{Status: "published"}); err != nil {
+			t.Errorf("匿名列已发布应放行: %v", err)
+		}
+	})
+}

@@ -157,7 +157,7 @@ func TestSiteUseCase_UpdateConfig(t *testing.T) {
 	uc, sr := setupSiteUseCase()
 	sr.config = &SiteSetting{SiteTitle: "Old", SiteSubtitle: "Keep"}
 
-	cfg, err := uc.UpdateConfig(context.Background(), &SiteSetting{SiteTitle: "New"})
+	cfg, err := uc.UpdateConfig(ctxWithRole(1, "admin"), &SiteSetting{SiteTitle: "New"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestSiteUseCase_Backgrounds(t *testing.T) {
 
 	validImage := makeValidImageContent()
 
-	bg, err := uc.AddBackground(context.Background(), "photo.jpg", validImage)
+	bg, err := uc.AddBackground(ctxWithRole(1, "admin"), "photo.jpg", validImage)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -187,12 +187,12 @@ func TestSiteUseCase_Backgrounds(t *testing.T) {
 		t.Errorf("expected 1 background, got %d", len(bgs))
 	}
 
-	err = uc.SetActiveBackground(context.Background(), bg.ID)
+	err = uc.SetActiveBackground(ctxWithRole(1, "admin"), bg.ID)
 	if err != nil {
 		t.Fatalf("SetActive error: %v", err)
 	}
 
-	err = uc.DeleteBackground(context.Background(), bg.ID)
+	err = uc.DeleteBackground(ctxWithRole(1, "admin"), bg.ID)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -201,7 +201,7 @@ func TestSiteUseCase_Backgrounds(t *testing.T) {
 func TestSiteUseCase_UpdatePlaylist(t *testing.T) {
 	uc, _ := setupSiteUseCase()
 
-	pl, err := uc.UpdatePlaylist(context.Background(), &MusicPlaylist{
+	pl, err := uc.UpdatePlaylist(ctxWithRole(1, "admin"), &MusicPlaylist{
 		Tracks: []MusicTrack{
 			{Title: "Song1", Artist: "Artist1", URL: "https://music.example.com/1.mp3", CoverURL: ""},
 		},
@@ -214,7 +214,7 @@ func TestSiteUseCase_UpdatePlaylist(t *testing.T) {
 	}
 
 	t.Run("invalid url", func(t *testing.T) {
-		_, err := uc.UpdatePlaylist(context.Background(), &MusicPlaylist{
+		_, err := uc.UpdatePlaylist(ctxWithRole(1, "admin"), &MusicPlaylist{
 			Tracks: []MusicTrack{{Title: "Bad", URL: "ftp://bad.com/music.mp3"}},
 		})
 		if err != ErrInvalidMusicURL {
@@ -225,10 +225,49 @@ func TestSiteUseCase_UpdatePlaylist(t *testing.T) {
 
 func TestSiteUseCase_AddBackground_InvalidImage(t *testing.T) {
 	uc, _ := setupSiteUseCase()
-	_, err := uc.AddBackground(context.Background(), "notimage.txt", []byte("hello world"))
+	_, err := uc.AddBackground(ctxWithRole(1, "admin"), "notimage.txt", []byte("hello world"))
 	if err != ErrInvalidImageFormat {
 		t.Errorf("expected ErrInvalidImageFormat, got %v", err)
 	}
+}
+
+// B-104: 站点写操作须管理员角色（角色由网关注入的 x-md-global-auth-user-role 提供）
+func TestSiteUseCase_RequiresAdminForWrites(t *testing.T) {
+	uc, sr := setupSiteUseCase()
+	sr.config = &SiteSetting{SiteTitle: "Old"}
+
+	t.Run("anonymous rejected", func(t *testing.T) {
+		_, err := uc.UpdateConfig(context.Background(), &SiteSetting{SiteTitle: "New"})
+		if err != ErrPermissionDenied {
+			t.Errorf("匿名 UpdateConfig 应拒绝: got %v", err)
+		}
+	})
+	t.Run("reader rejected", func(t *testing.T) {
+		_, err := uc.UpdateConfig(ctxWithRole(1, "reader"), &SiteSetting{SiteTitle: "New"})
+		if err != ErrPermissionDenied {
+			t.Errorf("reader UpdateConfig 应拒绝: got %v", err)
+		}
+	})
+	t.Run("admin allowed", func(t *testing.T) {
+		cfg, err := uc.UpdateConfig(ctxWithRole(1, "admin"), &SiteSetting{SiteTitle: "New"})
+		if err != nil {
+			t.Fatalf("admin UpdateConfig 应放行: %v", err)
+		}
+		if cfg.SiteTitle != "New" {
+			t.Errorf("expected New, got %s", cfg.SiteTitle)
+		}
+	})
+	t.Run("reader rejected for background delete", func(t *testing.T) {
+		if err := uc.DeleteBackground(ctxWithRole(1, "reader"), 1); err != ErrPermissionDenied {
+			t.Errorf("reader DeleteBackground 应拒绝: got %v", err)
+		}
+	})
+	t.Run("reader rejected for playlist", func(t *testing.T) {
+		_, err := uc.UpdatePlaylist(ctxWithRole(1, "reader"), &MusicPlaylist{Tracks: []MusicTrack{}})
+		if err != ErrPermissionDenied {
+			t.Errorf("reader UpdatePlaylist 应拒绝: got %v", err)
+		}
+	})
 }
 
 // =============================================================================

@@ -365,6 +365,12 @@ func ctxWithUser(userID uint64) context.Context {
 	})
 }
 
+func ctxWithRole(userID uint64, role string) context.Context {
+	return meta.NewClientCtx(context.Background(), &meta.RequestMetaData{
+		Auth: meta.Auth{UserID: userID, UserName: "testuser", Role: role},
+	})
+}
+
 func testLogger() log.Logger { return log.DefaultLogger }
 
 func setupArticleUseCase() (*ArticleUseCase, *mockArticleRepo, *mockTagRepo, *mockCategoryRepo, *mockEventBus) {

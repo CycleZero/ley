@@ -108,8 +108,11 @@ func (uc *SiteUseCase) GetConfig(ctx context.Context) (*SiteSetting, error) {
 	return cfg, nil
 }
 
-// UpdateConfig 更新站点配置。合并策略：仅覆盖传入的非零值字段，保留未传入字段的原值。
+// UpdateConfig 更新站点配置（仅管理员）。合并策略：仅覆盖传入的非零值字段，保留未传入字段的原值。
 func (uc *SiteUseCase) UpdateConfig(ctx context.Context, newCfg *SiteSetting) (*SiteSetting, error) {
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
+	}
 	uc.log.WithContext(ctx).Debugf("[SiteUseCase.UpdateConfig] 开始")
 
 	// 读取当前配置
@@ -137,8 +140,11 @@ func (uc *SiteUseCase) ListBackgrounds(ctx context.Context) ([]*SiteBackground, 
 	return uc.repo.ListBackgrounds(ctx)
 }
 
-// AddBackground 上传背景图片。校验 MIME 类型后再存储。
+// AddBackground 上传背景图片（仅管理员）。校验 MIME 类型后再存储。
 func (uc *SiteUseCase) AddBackground(ctx context.Context, filename string, content []byte) (*SiteBackground, error) {
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
+	}
 	uc.log.WithContext(ctx).Debugf("[SiteUseCase.AddBackground] filename=%q size=%d", filename, len(content))
 
 	if !isImageContent(content) {
@@ -154,13 +160,19 @@ func (uc *SiteUseCase) AddBackground(ctx context.Context, filename string, conte
 	return bg, nil
 }
 
-// DeleteBackground 删除背景图片。
+// DeleteBackground 删除背景图片（仅管理员）。
 func (uc *SiteUseCase) DeleteBackground(ctx context.Context, id uint) error {
+	if err := requireAdmin(ctx); err != nil {
+		return err
+	}
 	return uc.repo.DeleteBackground(ctx, id)
 }
 
-// SetActiveBackground 激活指定背景图片。
+// SetActiveBackground 激活指定背景图片（仅管理员）。
 func (uc *SiteUseCase) SetActiveBackground(ctx context.Context, id uint) error {
+	if err := requireAdmin(ctx); err != nil {
+		return err
+	}
 	uc.log.WithContext(ctx).Debugf("[SiteUseCase.SetActiveBackground] id=%d", id)
 	if err := uc.repo.SetActiveBackground(ctx, id); err != nil {
 		return fmt.Errorf("set active background: %w", err)
@@ -177,8 +189,11 @@ func (uc *SiteUseCase) GetPlaylist(ctx context.Context) (*MusicPlaylist, error) 
 	return cfg.MusicPlaylist, nil
 }
 
-// UpdatePlaylist 更新歌单（写入站点配置 JSON）。
+// UpdatePlaylist 更新歌单（仅管理员，写入站点配置 JSON）。
 func (uc *SiteUseCase) UpdatePlaylist(ctx context.Context, playlist *MusicPlaylist) (*MusicPlaylist, error) {
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
+	}
 	uc.log.WithContext(ctx).Debugf("[SiteUseCase.UpdatePlaylist] 开始 track_count=%d", len(playlist.Tracks))
 
 	// 校验每个 track 的 URL

@@ -8,6 +8,7 @@ import (
 
 	blogv1 "github.com/CycleZero/ley/api/blog/v1"
 	"github.com/CycleZero/ley/app/blog/internal/biz"
+	"github.com/CycleZero/ley/pkg/meta"
 	"github.com/go-kratos/kratos/v2/log"
 )
 
@@ -179,7 +180,10 @@ func TestServiceGetSiteConfig(t *testing.T) {
 
 func TestServiceUpdateSiteConfig(t *testing.T) {
 	svc, _ := newTestSiteService(t)
-	resp, err := svc.UpdateSiteConfig(context.Background(), &blogv1.UpdateSiteConfigRequest{
+	adminCtx := meta.NewClientCtx(context.Background(), &meta.RequestMetaData{
+		Auth: meta.Auth{UserID: 1, UserName: "admin", Role: "admin"},
+	})
+	resp, err := svc.UpdateSiteConfig(adminCtx, &blogv1.UpdateSiteConfigRequest{
 		Config: &blogv1.SiteConfig{
 			SiteTitle: "我的博客",
 			IcpNumber: "京ICP备00000000号",
