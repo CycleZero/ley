@@ -91,6 +91,22 @@ func TestGenerateTokenAndParse(t *testing.T) {
 	}
 }
 
+// B-103: JWT 载荷须携带角色，供网关透传后下游服务做 admin 判定
+func TestGenerateTokenCarriesRole(t *testing.T) {
+	j := newTestJWT(time.Hour)
+	token, err := j.GenerateToken(Payload{UserId: 9, UserName: "boss", Role: "admin"})
+	if err != nil {
+		t.Fatalf("GenerateToken 失败: %v", err)
+	}
+	claims, err := j.ParseToken(token)
+	if err != nil {
+		t.Fatalf("ParseToken 失败: %v", err)
+	}
+	if claims.Role != "admin" {
+		t.Errorf("Role 不匹配: got %q want admin", claims.Role)
+	}
+}
+
 func TestGenerateTokenPair(t *testing.T) {
 	j := newTestJWT(time.Minute)
 	pair, err := j.GenerateTokenPair(Payload{UserId: 7, UserName: "reader"})
@@ -237,6 +253,58 @@ func TestBlackListDisabledWithNilCache(t *testing.T) {
 	}
 	if err := bl.Add("any"); err == nil {
 		t.Error("nil 缓存时 Add 应报错")
+	}
+}
+
+// ttlRecordingCache 包装 InMemoryCache，额外记录每次 Set 的 expiration，
+// 用于断言黑名单条目按 token 剩余寿命设置 TTL（而非永久键）。
+type ttlRecordingCache struct {
+	*datatest.InMemoryCache
+	ttls map[string]time.Duration
+}
+
+func newTTLRecordingCache() *ttlRecordingCache {
+	return &ttlRecordingCache{
+		InMemoryCache: datatest.NewInMemoryCache(),
+		ttls:          make(map[string]time.Duration),
+	}
+}
+
+func (c *ttlRecordingCache) Set(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
+	c.ttls[key] = expiration
+	return c.InMemoryCache.Set(ctx, key, value, expiration)
+}
+
+// B-101: 黑名单条目应按 token 剩余寿命设置 TTL（登出/轮换后键不永久驻留 Redis）
+func TestBlackListAddWithTTL(t *testing.T) {
+	c := newTTLRecordingCache()
+	bl := NewBlackList(c)
+
+	ttl := 5 * time.Minute
+	if err := bl.AddWithTTL("token-ttl", ttl); err != nil {
+		t.Fatalf("AddWithTTL 失败: %v", err)
+	}
+	if !bl.IsTokenBlackListed("token-ttl") {
+		t.Error("带 TTL 加入后应命中")
+	}
+	if got := c.ttls[blacklistKeyPrefix+"token-ttl"]; got != ttl {
+		t.Errorf("AddWithTTL 应传播 TTL=%v，实际 %v", ttl, got)
+	}
+}
+
+// 兼容旧语义：Add(无 TTL) 保持永久键（TTL=0）
+func TestBlackListAddKeepsLegacyPermanentSemantics(t *testing.T) {
+	c := newTTLRecordingCache()
+	bl := NewBlackList(c)
+
+	if err := bl.Add("legacy-token"); err != nil {
+		t.Fatalf("Add 失败: %v", err)
+	}
+	if !bl.IsTokenBlackListed("legacy-token") {
+		t.Error("legacy Add 后应命中")
+	}
+	if got := c.ttls[blacklistKeyPrefix+"legacy-token"]; got != 0 {
+		t.Errorf("Add(无 TTL) 应保持永久语义 TTL=0，实际 %v", got)
 	}
 }
 

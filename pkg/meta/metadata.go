@@ -15,6 +15,8 @@ const (
 	AuthUserIDKey = MetaDataKeyPrefix + "auth-user-id"
 	// AuthUserNameKey 认证用户名（全局透传）
 	AuthUserNameKey = MetaDataKeyPrefix + "auth-user-name"
+	// AuthUserRoleKey 认证用户角色（reader/author/admin，全局透传）
+	AuthUserRoleKey = MetaDataKeyPrefix + "auth-user-role"
 	// AuthRealClientIpKey 真实IP（全局透传）
 	AuthRealClientIpKey = MetaDataKeyPrefix + "auth-real-ip"
 )
@@ -31,6 +33,7 @@ type RequestMetaData struct {
 type Auth struct {
 	UserID   uint64 // 用户ID
 	UserName string // 用户名
+	Role     string // 用户角色（reader/author/admin）
 }
 
 // =====================  核心转换方法（兼容 Kratos Metadata 结构） =====================
@@ -49,6 +52,9 @@ func (m *RequestMetaData) IntoMetadata() metadata.Metadata {
 	}
 	if m.Auth.UserName != "" {
 		md.Set(AuthUserNameKey, m.Auth.UserName)
+	}
+	if m.Auth.Role != "" {
+		md.Set(AuthUserRoleKey, m.Auth.Role)
 	}
 	if m.RealClientIp != "" {
 		md.Set(AuthRealClientIpKey, m.RealClientIp)
@@ -70,6 +76,7 @@ func ParseMetadata(md metadata.Metadata) *RequestMetaData {
 
 	// 解析用户名
 	meta.Auth.UserName = md.Get(AuthUserNameKey)
+	meta.Auth.Role = md.Get(AuthUserRoleKey)
 	meta.RealClientIp = md.Get(AuthRealClientIpKey)
 
 	return meta

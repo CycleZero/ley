@@ -23,7 +23,11 @@ const (
 )
 
 type BlackListCache interface {
+	// Add 将 token 加入黑名单并保持永久键（TTL=0）。
 	Add(token string) error
+	// AddWithTTL 将 token 加入黑名单，并按 token 剩余寿命设置 TTL，
+	// 使黑名单键随 token 自然过期，避免 Redis 无限增长。
+	AddWithTTL(token string, ttl time.Duration) error
 	IsTokenBlackListed(token string) bool
 	IsEnabled() bool
 }
@@ -34,13 +38,16 @@ type blackList struct {
 }
 
 func (b *blackList) Add(token string) error {
+	return b.AddWithTTL(token, 0)
+}
+
+func (b *blackList) AddWithTTL(token string, ttl time.Duration) error {
 	if b.cache == nil {
 		return errors.New("cache is not initialized")
 	}
 	ctx := context.Background()
 	key := blacklistKeyPrefix + token
-	// 设置黑名单，值设为 "1"，永不过期（token 本身有过期时间）
-	return b.cache.Set(ctx, key, "1", 0)
+	return b.cache.Set(ctx, key, "1", ttl)
 }
 
 func (b *blackList) IsTokenBlackListed(token string) bool {
@@ -89,6 +96,7 @@ type TokenPair struct {
 type Payload struct {
 	UserId   uint64 `json:"user_id"`   // 用户ID
 	UserName string `json:"user_name"` // 用户名
+	Role     string `json:"role"`      // 用户角色（reader/author/admin）
 }
 
 // Claims jwtPaser Claims 定义
@@ -236,6 +244,7 @@ func (j *jwtPaser) Server() middleware.Middleware {
 								Auth: meta.Auth{
 									UserID:   claims.UserId,
 									UserName: claims.UserName,
+									Role:     claims.Role,
 								},
 							}
 							ctx = meta.NewClientCtx(ctx, reqMeta)

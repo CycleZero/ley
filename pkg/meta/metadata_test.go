@@ -104,3 +104,30 @@ func TestGetRequestMetaDataEmpty(t *testing.T) {
 		t.Errorf("无上下文时应返回空结构: %+v", got)
 	}
 }
+
+// B-103: 用户角色须随业务元数据透传（x-md-global-auth-role），供下游服务做 admin 判定
+func TestMetaCarriesRole(t *testing.T) {
+	reqMeta := &RequestMetaData{Auth: Auth{UserID: 1, UserName: "boss", Role: "admin"}}
+
+	md := reqMeta.IntoMetadata()
+	if got := md.Get(AuthUserRoleKey); got != "admin" {
+		t.Errorf("AuthUserRoleKey 缺失或值错误: got %q want admin", got)
+	}
+
+	parsed := ParseMetadata(md)
+	if parsed.Auth.Role != "admin" {
+		t.Errorf("Role 往返不一致: %+v", parsed.Auth)
+	}
+	if parsed.Auth.UserID != 1 || parsed.Auth.UserName != "boss" {
+		t.Errorf("Role 携带不应破坏既有字段: %+v", parsed.Auth)
+	}
+}
+
+// B-103: 角色为空时不写入 metadata（与其它零值字段一致）
+func TestMetaSkipsEmptyRole(t *testing.T) {
+	reqMeta := &RequestMetaData{Auth: Auth{UserID: 5, UserName: "reader"}}
+	md := reqMeta.IntoMetadata()
+	if got := md.Get(AuthUserRoleKey); got != "" {
+		t.Errorf("空 Role 不应写入: %q", got)
+	}
+}
