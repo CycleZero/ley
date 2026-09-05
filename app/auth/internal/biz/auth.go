@@ -3,6 +3,7 @@ package biz
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/CycleZero/ley/pkg/eventbus"
 	"github.com/CycleZero/ley/pkg/jwt"
@@ -78,6 +79,7 @@ func (uc *AuthUseCase) Register(ctx context.Context, username, email, password s
 	pair, err := uc.jwt.GenerateTokenPair(jwt.Payload{
 		UserId:   uint64(user.ID),
 		UserName: user.Username,
+		Role:     string(user.Role),
 	})
 	if err != nil {
 		uc.log.WithContext(ctx).Errorf("生成令牌失败 id=%d: %v", user.ID, err)
@@ -116,6 +118,7 @@ func (uc *AuthUseCase) Login(ctx context.Context, account, password string) (*jw
 	pair, err := uc.jwt.GenerateTokenPair(jwt.Payload{
 		UserId:   uint64(user.ID),
 		UserName: user.Username,
+		Role:     string(user.Role),
 	})
 	if err != nil {
 		uc.log.WithContext(ctx).Errorf("生成令牌失败 id=%d: %v", user.ID, err)
@@ -152,6 +155,7 @@ func (uc *AuthUseCase) RefreshToken(ctx context.Context, refreshToken string) (*
 	pair, err := uc.jwt.GenerateTokenPair(jwt.Payload{
 		UserId:   uint64(user.ID),
 		UserName: user.Username,
+		Role:     string(user.Role),
 	})
 	if err != nil {
 		uc.log.WithContext(ctx).Errorf("刷新令牌生成失败 id=%d: %v", user.ID, err)
@@ -159,13 +163,23 @@ func (uc *AuthUseCase) RefreshToken(ctx context.Context, refreshToken string) (*
 	}
 
 	if uc.blacklist.IsEnabled() {
-		if err := uc.blacklist.Add(refreshToken); err != nil {
+		if err := uc.blacklist.AddWithTTL(refreshToken, tokenRemainingTTL(claims)); err != nil {
 			uc.log.WithContext(ctx).Warnf("旧令牌加入黑名单失败: %v", err)
 		}
 	}
 
 	uc.log.WithContext(ctx).Infof("令牌刷新成功 id=%d", user.ID)
 	return pair, user, nil
+}
+
+// tokenRemainingTTL 返回 token 距过期的剩余时长，供黑名单按剩余寿命设置 TTL，
+// 避免黑名单键永久驻留 Redis。已过期时兜底 1 秒（解析成功路径理论上不会出现）。
+func tokenRemainingTTL(claims *jwt.Claims) time.Duration {
+	ttl := time.Until(claims.ExpiresAt.Time)
+	if ttl <= 0 {
+		return time.Second
+	}
+	return ttl
 }
 
 // =============================================================================
@@ -178,14 +192,14 @@ func (uc *AuthUseCase) Logout(ctx context.Context, accessToken, refreshToken str
 	}
 
 	if accessToken != "" {
-		if _, err := uc.jwt.ParseAccessToken(accessToken); err == nil {
-			_ = uc.blacklist.Add(accessToken)
+		if claims, err := uc.jwt.ParseAccessToken(accessToken); err == nil {
+			_ = uc.blacklist.AddWithTTL(accessToken, tokenRemainingTTL(claims))
 		}
 	}
 
 	if refreshToken != "" {
-		if _, err := uc.jwt.ParseRefreshToken(refreshToken); err == nil {
-			_ = uc.blacklist.Add(refreshToken)
+		if claims, err := uc.jwt.ParseRefreshToken(refreshToken); err == nil {
+			_ = uc.blacklist.AddWithTTL(refreshToken, tokenRemainingTTL(claims))
 		}
 	}
 
