@@ -142,7 +142,6 @@ jobs:
           context: .
           file: ./Dockerfile
           push: false
-          load: true
           tags: ley-builder:v1
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -155,7 +154,6 @@ jobs:
           context: .
           file: ./runtime.Dockerfile
           push: false
-          load: true
           tags: ley-runtime:v1
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -168,8 +166,8 @@ jobs:
           push: false
           tags: ley-auth:ci
           build-contexts: |
-            ley-builder:v1=docker-image://ley-builder:v1
-            ley-runtime:v1=docker-image://ley-runtime:v1
+            ley-builder:v1=docker-image://ghcr.io/cyclezero/ley/ley-builder:latest
+            ley-runtime:v1=docker-image://ghcr.io/cyclezero/ley/ley-runtime:latest
           cache-from: type=gha
           build-args: |
             GOPROXY=https://proxy.golang.org,direct
@@ -182,8 +180,8 @@ jobs:
           push: false
           tags: ley-blog:ci
           build-contexts: |
-            ley-builder:v1=docker-image://ley-builder:v1
-            ley-runtime:v1=docker-image://ley-runtime:v1
+            ley-builder:v1=docker-image://ghcr.io/cyclezero/ley/ley-builder:latest
+            ley-runtime:v1=docker-image://ghcr.io/cyclezero/ley/ley-runtime:latest
           cache-from: type=gha
           build-args: |
             GOPROXY=https://proxy.golang.org,direct
@@ -196,8 +194,8 @@ jobs:
           push: false
           tags: ley-gateway:ci
           build-contexts: |
-            ley-builder:v1=docker-image://ley-builder:v1
-            ley-runtime:v1=docker-image://ley-runtime:v1
+            ley-builder:v1=docker-image://ghcr.io/cyclezero/ley/ley-builder:latest
+            ley-runtime:v1=docker-image://ghcr.io/cyclezero/ley/ley-runtime:latest
           cache-from: type=gha
           build-args: |
             GOPROXY=https://proxy.golang.org,direct
@@ -210,8 +208,8 @@ jobs:
           push: false
           tags: ley-entry:ci
           build-contexts: |
-            ley-builder:v1=docker-image://ley-builder:v1
-            ley-runtime:v1=docker-image://ley-runtime:v1
+            ley-builder:v1=docker-image://ghcr.io/cyclezero/ley/ley-builder:latest
+            ley-runtime:v1=docker-image://ghcr.io/cyclezero/ley/ley-runtime:latest
           cache-from: type=gha
           build-args: |
             GOPROXY=https://proxy.golang.org,direct
