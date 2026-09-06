@@ -82,8 +82,10 @@ func NewBlackList(cache cache.Cache) BlackListCache {
 // jwtPaser 配置
 type Config struct {
 	SigningKey  string        // 签名密钥
-	ExpiredTime time.Duration // Token 过期时间
-	Issuer      string        // 签发者
+	ExpiredTime time.Duration // Token 过期时间（access）
+	// RefreshExpiredTime refresh token 过期时间；未配置(0)时回退为 access×7（历史语义）
+	RefreshExpiredTime time.Duration
+	Issuer             string // 签发者
 	//Cache       cache.Cache   // 缓存
 }
 
@@ -143,7 +145,8 @@ func (j *jwtPaser) GenerateToken(payload Payload) (string, error) {
 
 // GenerateTokenPair 生成 Token 对（AccessToken 和 RefreshToken）
 // AccessToken: 短期有效的访问令牌，使用配置的过期时间
-// RefreshToken: 长期有效的刷新令牌，过期时间是 AccessToken 的 7 倍
+// RefreshToken: 长期有效的刷新令牌，过期时间优先取 RefreshExpiredTime，
+// 未配置时回退为 AccessToken 过期时间的 7 倍（历史语义）
 func (j *jwtPaser) GenerateTokenPair(payload Payload) (*TokenPair, error) {
 	// 生成 AccessToken
 	accessToken, err := j.GenerateToken(payload)
@@ -151,9 +154,13 @@ func (j *jwtPaser) GenerateTokenPair(payload Payload) (*TokenPair, error) {
 		return nil, err
 	}
 
-	// 生成 RefreshToken（过期时间是 AccessToken 的 7 倍）
+	refreshTTL := j.config.RefreshExpiredTime
+	if refreshTTL <= 0 {
+		refreshTTL = j.config.ExpiredTime * 7
+	}
+	// 生成 RefreshToken
 	nowTime := time.Now()
-	refreshExpireTime := nowTime.Add(j.config.ExpiredTime * 7)
+	refreshExpireTime := nowTime.Add(refreshTTL)
 
 	refreshClaims := Claims{
 		TokenType: TokenTypeRefresh,
@@ -176,6 +183,11 @@ func (j *jwtPaser) GenerateTokenPair(payload Payload) (*TokenPair, error) {
 		AccessToken:  accessToken,
 		RefreshToken: refreshTokenString,
 	}, nil
+}
+
+// AccessTTL 返回 access token 有效期（供响应 expires_in 回填）
+func (j *jwtPaser) AccessTTL() time.Duration {
+	return j.config.ExpiredTime
 }
 
 // ParseToken 解析 Token（不校验类型）
@@ -291,6 +303,7 @@ type JWT interface {
 	ParseToken(tokenString string) (*Claims, error)
 	ParseAccessToken(tokenString string) (*Claims, error)
 	ParseRefreshToken(tokenString string) (*Claims, error)
+	AccessTTL() time.Duration
 	Server() middleware.Middleware
 	Client() middleware.Middleware
 }

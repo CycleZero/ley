@@ -197,8 +197,8 @@ func TestServiceRegister(t *testing.T) {
 	if resp.TokenPair.AccessToken == "" || resp.TokenPair.RefreshToken == "" {
 		t.Error("应返回 token pair")
 	}
-	if resp.TokenPair.ExpiresIn != 900 {
-		t.Errorf("ExpiresIn 应为 900: %d", resp.TokenPair.ExpiresIn)
+	if resp.TokenPair.ExpiresIn != 3600 {
+		t.Errorf("ExpiresIn 应与 access TTL(1h) 一致: got %d want 3600", resp.TokenPair.ExpiresIn)
 	}
 }
 

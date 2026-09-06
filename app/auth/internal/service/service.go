@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"time"
 
 	authv1 "github.com/CycleZero/ley/api/auth/v1"
 	commonv1 "github.com/CycleZero/ley/api/common/v1"
@@ -31,7 +32,7 @@ func (s *AuthService) Register(ctx context.Context, req *authv1.RegisterRequest)
 	}
 	return &authv1.RegisterReply{
 		User:      toUserInfo(user),
-		TokenPair: toTokenPair(pair),
+		TokenPair: toTokenPair(pair, s.authUC.AccessTTL()),
 	}, nil
 }
 
@@ -42,7 +43,7 @@ func (s *AuthService) Login(ctx context.Context, req *authv1.LoginRequest) (*aut
 	}
 	return &authv1.LoginReply{
 		User:      toUserInfo(user),
-		TokenPair: toTokenPair(pair),
+		TokenPair: toTokenPair(pair, s.authUC.AccessTTL()),
 	}, nil
 }
 
@@ -53,7 +54,7 @@ func (s *AuthService) RefreshToken(ctx context.Context, req *authv1.RefreshToken
 	}
 	return &authv1.RefreshTokenReply{
 		User:      toUserInfo(user),
-		TokenPair: toTokenPair(pair),
+		TokenPair: toTokenPair(pair, s.authUC.AccessTTL()),
 	}, nil
 }
 
@@ -96,16 +97,16 @@ func toUserInfo(u *biz.User) *commonv1.UserInfo {
 		Avatar:    u.Avatar,
 		Bio:       u.Bio,
 		Role:      string(u.Role),
-		CreatedAt: u.CreatedAt.Format("2006-01-02T15:04:05Z"),
-		UpdatedAt: u.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+		CreatedAt: u.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt: u.UpdatedAt.UTC().Format(time.RFC3339),
 	}
 }
 
-func toTokenPair(pair *jwt.TokenPair) *commonv1.TokenPair {
+func toTokenPair(pair *jwt.TokenPair, accessTTL time.Duration) *commonv1.TokenPair {
 	return &commonv1.TokenPair{
 		AccessToken:  pair.AccessToken,
 		RefreshToken: pair.RefreshToken,
-		ExpiresIn:    900,
+		ExpiresIn:    int64(accessTTL.Seconds()),
 	}
 }
 

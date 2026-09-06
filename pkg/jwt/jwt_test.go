@@ -174,6 +174,38 @@ func TestRefreshTokenTTLIsSevenTimesAccess(t *testing.T) {
 	}
 }
 
+// B-201: 显式配置 RefreshExpiredTime 时，refresh 寿命不再绑定 access×7
+func TestGenerateTokenPairUsesConfiguredRefreshTTL(t *testing.T) {
+	j := NewJWT(&Config{
+		SigningKey:         "test-signing-key-0123456789-256bit-random",
+		ExpiredTime:        time.Minute,
+		RefreshExpiredTime: 7 * 24 * time.Hour,
+		Issuer:             "test-issuer",
+	})
+	pair, err := j.GenerateTokenPair(Payload{UserId: 1})
+	if err != nil {
+		t.Fatalf("GenerateTokenPair 失败: %v", err)
+	}
+	accessClaims, _ := j.ParseAccessToken(pair.AccessToken)
+	refreshClaims, _ := j.ParseRefreshToken(pair.RefreshToken)
+
+	refreshTTL := refreshClaims.ExpiresAt.Time.Sub(refreshClaims.IssuedAt.Time)
+	if refreshTTL != 7*24*time.Hour {
+		t.Errorf("配置 refresh_ttl 后 refresh 应为 7 天: got %v", refreshTTL)
+	}
+	if accessTTL := accessClaims.ExpiresAt.Time.Sub(accessClaims.IssuedAt.Time); accessTTL != time.Minute {
+		t.Errorf("access TTL 不应受影响: got %v", accessTTL)
+	}
+}
+
+// B-201: AccessTTL 应返回配置的 access 有效期（供响应 expires_in 回填）
+func TestAccessTTL(t *testing.T) {
+	j := newTestJWT(900 * time.Second)
+	if got := j.AccessTTL(); got != 900*time.Second {
+		t.Errorf("AccessTTL = %v, want 900s", got)
+	}
+}
+
 func TestParseExpiredToken(t *testing.T) {
 	j := newTestJWT(-time.Minute) // 过期时间在过去
 	token, err := j.GenerateToken(Payload{UserId: 1})

@@ -13,9 +13,10 @@ import (
 
 func ProvideJWT(sc *conf.Config) jwt.JWT {
 	return jwt.NewJWT(&jwt.Config{
-		SigningKey:  sc.Jwt.Secret,
-		ExpiredTime: sc.Jwt.AccessTtl.AsDuration(),
-		Issuer:      sc.Jwt.Issuer,
+		SigningKey:         sc.Jwt.Secret,
+		ExpiredTime:        sc.Jwt.AccessTtl.AsDuration(),
+		RefreshExpiredTime: sc.Jwt.RefreshTtl.AsDuration(),
+		Issuer:             sc.Jwt.Issuer,
 	})
 }
 

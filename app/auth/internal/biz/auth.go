@@ -35,6 +35,11 @@ func NewAuthUseCase(repo UserRepo, j jwt.JWT, bl jwt.BlackListCache, eb eventbus
 	}
 }
 
+// AccessTTL 返回 access token 有效期，供 service 层回填响应 expires_in
+func (uc *AuthUseCase) AccessTTL() time.Duration {
+	return uc.jwt.AccessTTL()
+}
+
 // =============================================================================
 // Register — 用户注册
 // =============================================================================
