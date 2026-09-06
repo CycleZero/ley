@@ -15,6 +15,9 @@ on:
       - 'Dockerfile'
       - 'runtime.Dockerfile'
       - 'docker-compose.yml'
+      - '.github/workflows/**'
+  workflow_dispatch:
+
   pull_request:
     branches: [main, master]
 
