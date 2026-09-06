@@ -6,7 +6,7 @@
 |---|---|---|---|
 | **CI** | `.github/workflows/ci.yml` | `push` / `pull_request`（全量） | 编译检查、单元测试、前端构建、Docker 镜像构建验证 |
 | **CD - Backend** | `.github/workflows/deploy-backend.yml` | `push main` 且修改了**后端代码** | 构建并推送后端 Docker 镜像到 Harbor，SSH 部署到后端服务器 |
-| **CD - Frontend** | `.github/workflows/deploy-frontend.yml` | `push main` 且修改了**前端代码** | 构建 Nuxt 静态站点，rsync 部署到前端 Nginx 服务器 |
+| **CD - Frontend** | `.github/workflows/deploy-frontend.yml` | `push main` 且修改了**前端代码** | 构建 React SPA 静态产物（web/dist），rsync 部署到前端 Nginx 服务器 |
 
 > 💡 **设计原则**：CI 保持全量检查（编译不省），CD 按需触发（只改前端时不浪费后端镜像构建时间）。
 
@@ -21,7 +21,7 @@
 - ✅ **CD - Backend** — 构建后端镜像 → 推送 Harbor → 部署后端服务器
 - ❌ **CD - Frontend** — **不触发**
 
-### 修改前端文件时（如 `web/app/pages/about.vue`）
+### 修改前端文件时（如 `web/src/pages/about.tsx`）
 
 触发的工作流：
 - ✅ **CI** — 全量检查
@@ -43,15 +43,15 @@
 
 包含三个并行 Job：
 
-1. **backend** — Go 后端编译 + 单元测试
-2. **frontend** — Nuxt 前端安装依赖 + 构建
+1. **backend** — Go 后端编译 + 单元测试（make test-unit 覆盖 ./app/... 含 entry）
+2. **frontend** — React SPA 前端安装依赖 + 构建
 3. **docker** — Docker 镜像构建验证（不推送）
 
 ### CD - Backend (`deploy-backend.yml`)
 
 包含两个串行 Job：
 
-1. **build-backend** — 构建 auth/blog/gateway 镜像并推送到 Harbor
+1. **build-backend** — 构建 auth/blog/gateway/entry 镜像并推送到 Harbor（entry 为 T13 共存期接入，T14 切换后接替 gateway）
 2. **deploy-backend** — SSH 到后端服务器，从 Harbor 拉取镜像并重命名标签，docker-compose 重启
 
 ### CD - Frontend (`deploy-frontend.yml`)

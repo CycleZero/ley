@@ -124,6 +124,22 @@ jobs:
             ley-builder:v1=docker-image://ghcr.io/cyclezero/ley/ley-builder:latest
             ley-runtime:v1=docker-image://ghcr.io/cyclezero/ley/ley-runtime:latest
 
+      # ---------- Entry 入口服务镜像（T13 共存期随后端发布，T14 切换后接替 gateway） ----------
+      - name: Build and push entry
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./app/entry/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.HARBOR_REGISTRY }}/ley/ley-entry:latest
+            ${{ secrets.HARBOR_REGISTRY }}/ley/ley-entry:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-contexts: |
+            ley-builder:v1=docker-image://ghcr.io/cyclezero/ley/ley-builder:latest
+            ley-runtime:v1=docker-image://ghcr.io/cyclezero/ley/ley-runtime:latest
+
   # =============================================================================
   # 部署后端到后端服务器（Docker + Harbor）
   # =============================================================================
@@ -173,15 +189,21 @@ jobs:
             docker pull $HARBOR_REGISTRY/ley/ley-auth:${{ github.sha }}
             docker pull $HARBOR_REGISTRY/ley/ley-blog:${{ github.sha }}
             docker pull $HARBOR_REGISTRY/ley/ley-gateway:${{ github.sha }}
+            docker pull $HARBOR_REGISTRY/ley/ley-entry:${{ github.sha }}
 
             echo '--- 重命名为本地标签 ---'
             docker tag $HARBOR_REGISTRY/ley/ley-auth:${{ github.sha }} ley-auth:latest
             docker tag $HARBOR_REGISTRY/ley/ley-blog:${{ github.sha }} ley-blog:latest
             docker tag $HARBOR_REGISTRY/ley/ley-gateway:${{ github.sha }} ley-gateway:latest
+            docker tag $HARBOR_REGISTRY/ley/ley-entry:${{ github.sha }} ley-entry:latest
 
             echo '--- 重启服务 ---'
             docker compose -f /projects/ley/docker-compose.yml down
-            docker compose -f /projects/ley/docker-compose.yml up -d
+            # T13 共存阶段：显式拉起 gateway（entry 与 gateway 均默认监听 :8000，
+            # 同时 up 会争抢端口——服务器需先把 data/entry/configs/config.yaml 的
+            # server.http.addr 改为 0.0.0.0:8003 后再把 entry 加入列表）。
+            # T14 切换：gateway 退役后，此处改为 up -d entry，并删除 gateway。
+            docker compose -f /projects/ley/docker-compose.yml up -d auth blog gateway
 
             echo '--- 清理旧镜像 ---'
             docker image prune -af --filter 'until=168h'
