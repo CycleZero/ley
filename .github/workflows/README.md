@@ -80,7 +80,7 @@
 | `FRONTEND_SERVER_PORT` | **前端**SSH 端口（可选，默认 22） | `22` |
 | `FRONTEND_DEPLOY_PATH` | **前端**Nginx 根目录（可选，默认 `/var/www/ley`） | `/usr/share/nginx/html/ley` |
 | `VITE_API_BASE` | 前端 API 基地址（可选；React 纯 SPA 无 SSR，构建时注入） | `https://api.yoursite.com` |
-| `GHCR_PAT` | GitHub Container Registry 个人访问令牌（服务器 pull 私有镜像用，需 read:packages 权限） | `ghp_xxx...` |
+| `GHCR_PAT` | GitHub Container Registry 个人访问令牌（构建推送 + 服务器 pull 私有镜像均用此 PAT，需 **write:packages** 权限，read 由 write 隐含） | `ghp_xxx...` |
 
 > ⚠️ **安全提示**：所有 GHCR PAT、服务器相关信息均通过 Secrets 注入，**不会以任何形式暴露在仓库代码或工作流日志中**（GitHub Actions 会自动将 Secrets 值替换为 `***`）。
 
@@ -106,7 +106,7 @@
    ```
    在 GitHub 上新建 Secret，名称为 `SSH_PRIVATE_KEY`（前后端共用）或分别配置 `SSH_PRIVATE_KEY` + `FRONTEND_SSH_PRIVATE_KEY`。
 
-4. **添加 GHCR Secret**：`GHCR_PAT`（GitHub → Settings → Developer settings → Personal access tokens，勾选 `read:packages`，仓库需在 org 设置中授权该 token 访问）。
+4. **添加 GHCR Secret**：`GHCR_PAT`（GitHub → Settings → Developer settings → Personal access tokens，勾选 **`write:packages`**，GitHub Actions 构建镜像推送与服务器 pull 均使用该 PAT）。
 
 5. **添加服务器连接 Secrets**：`SERVER_HOST`、`FRONTEND_SERVER_HOST` 等。
 
