@@ -214,6 +214,7 @@ docker exec -i ley-postgres psql -U ley -d ley < schema.sql
 # data/auth/configs/config.yaml
 # data/blog/configs/config.yaml
 # data/gateway/configs/config.yaml
+# data/entry/configs/config.yaml        # entry 引导配置（复制自 configs/entry.yaml）
 ```
 
 **关键修改项：**
@@ -224,6 +225,8 @@ docker exec -i ley-postgres psql -U ley -d ley < schema.sql
 4. **日志级别**：`log.level: Info`（生产环境不要开 Debug）
 5. **MinIO 密码**：`data/blog/configs/config.yaml` 中的 `access_key_secret`
 6. **CORS**：把 `allowOrigins: ["*"]` 改成你的域名：`allowOrigins: ["https://yourdomain.com"]`
+7. **Entry 业务配置**（etcd 键 `ley/configs/entry/config.yaml`，用 `bash scripts/seed-etcd.sh` 下发）：
+   `jwt.secret` 必须与 auth 完全一致（entry 只校验不签发 token），`redis.db` 用 0 与 auth 黑名单对齐
 
 ### 4.2 Docker 部署（推荐）
 
@@ -239,7 +242,12 @@ make docker-build
 docker build -f app/gateway/Dockerfile -t ley-gateway:latest .
 docker build -f app/auth/Dockerfile --build-arg GOPROXY=https://goproxy.cn,direct --build-arg SERVICE_NAME=auth -t ley-auth:latest .
 docker build -f app/blog/Dockerfile --build-arg GOPROXY=https://goproxy.cn,direct --build-arg SERVICE_NAME=blog -t ley-blog:latest .
+docker build -f app/entry/Dockerfile --build-arg GOPROXY=https://goproxy.cn,direct -t ley-entry:latest .
 ```
+
+> **⚠️ Entry 与 Gateway 端口共存（T13 阶段）**：两者均默认监听 `:8000`。
+> 共存部署时先把 `data/entry/configs/config.yaml` 的 `server.http.addr` 改为 `0.0.0.0:8003`
+> （`:8001`/`:8002` 已被 auth/blog HTTP 占用）。T14 切换后移除 gateway、entry 恢复 `:8000`。
 
 **修改现有 `docker-compose.yml` 适配生产：**
 
@@ -329,6 +337,7 @@ docker compose up -d
 docker compose logs -f gateway
 docker compose logs -f auth
 docker compose logs -f blog
+docker compose logs -f entry   # entry 需先在 data/entry/configs/config.yaml 改 8003 端口并加入 compose 服务列表
 ```
 
 ### 4.4 验证后端健康

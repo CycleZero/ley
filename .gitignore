@@ -48,7 +48,7 @@ config.yaml
 *.pb.go
 
 openapi.yaml
-
+.reasonix/
 .claude
 
 opencode.json

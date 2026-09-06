@@ -19,7 +19,8 @@ ley/
 ├── app/
 │   ├── auth/               # 认证服务 — 标准 Kratos DDD（见下方分层）
 │   ├── blog/               # 博客服务 — 标准 Kratos DDD（见下方分层）
-│   └── gateway/            # API 网关 — 非 DDD 结构（见 gateway/AGENTS.md）
+│   ├── entry/              # 入口服务（规划中）— 非 Kratos 微服务（见「Entry 入口服务特别说明」）
+│   └── gateway/            # 旧 API 网关 — 非 DDD 结构（规划替换为 entry，见 gateway/AGENTS.md）
 ├── web/                # React 19 SPA 前端（Vite 8，2026-07 由 Nuxt 4 重构而来）
 │   └── src/
 │       ├── pages/          # 页面（前台 + /admin 后台）
@@ -69,6 +70,8 @@ ley/
 | 标签/分类 | `app/blog/internal/biz/tag.go` | 树形分类，循环引用检测 |
 | 文件上传 | `app/blog/internal/biz/file.go` | MinIO 直传、MIME 校验 |
 | 网关路由/中间件 | `app/gateway/proxy/`、`app/gateway/middleware/` | JWT/CORS/限流/熔断/链路追踪 |
+| 入口服务（规划中） | `app/entry/` | Gin 统一入口：JWT 鉴权/信封/转发（见 Entry 特别说明） |
+| 用户上下文传递 | `pkg/meta/` | `x-md-global-` 前缀，handler/服务间统一 |
 | 前端 API 客户端 | `web/src/lib/api-client.ts` | ofetch：Token 注入、401 单飞刷新、`{code,msg,data}` 解包 |
 | 前端数据获取 | `web/src/hooks/use-*.ts` | TanStack Query（tags/categories staleTime 60s） |
 | 前端页面 | `web/src/pages/` | 文件路由，含 `/admin` 后台 |
@@ -99,6 +102,56 @@ app/{service}/
 
 **Gateway 不遵循此分层** — 它是上游 go-kratos/gateway 的嵌入，结构完全不同。参见 `app/gateway/AGENTS.md`。
 
+## Entry 入口服务特别说明（⚠️ 与微服务区分）
+
+> **`app/entry/` 不是 Kratos 微服务，不是标准 DDD 四层结构**——请勿用 auth/blog 的分层方式套用它，也勿在它上面照搬微服务规范。它是**基于 Gin 的轻量统一入口（API Edge / BFF 形态）**，定位与 gate 门禁替代旧 gateway。
+
+### 与 Kratos 微服务的本质区别
+
+| 维度 | 微服务（auth / blog） | entry（Gin 入口） |
+|---|---|---|
+| 框架 | Kratos v2（gRPC + HTTP 双 server） | **Gin 单 HTTP server** |
+| 分层 | cmd → service → biz → data（4 层） | **无 DDD 四层**：router → middleware → handler → gRPC client |
+| 业务逻辑 | 有（领域用例/仓储） | **无领域逻辑**（职责是"入口 + 转发 + 聚合"） |
+| 数据访问 | 直接连 DB/Redis/MinIO | **不直接访问存储**，只通过 gRPC 调 auth/blog |
+| 服务发现 | 注册到 etcd 供消费方发现 | **消费方**：从 etcd 发现 auth/blog 端点 |
+| proto 生成 | 定义自己服务的 rpc | 复用 `api/` 生成的 pb client（不新增业务 rpc） |
+| 测试策略 | 单元+集成（biz/data 分层测） | handler 集成测试（httptest + fake gRPC server） |
+
+### 职责边界（防止职责漂移）
+
+- ✅ **做**：统一入口（端口聚合）、JWT 鉴权、限流、CORS、响应信封 `{code,msg,data}`、trace/日志、**转发**（gRPC client 调 auth/blog）、（未来）**轻量聚合**（如首页仪表盘多服务合并）
+- ❌ **不做**：领域业务逻辑、直接 DB/Redis/OSS 访问、分布式事务、与 auth/blog 重复的业务规则——**这些必须留在各自微服务**
+
+### 基础设施对齐（架构一体性——不是孤岛）
+
+- **配置**：与微服务一致——本地引导配置（`data/entry/configs/config.yaml`，Bootstrap 结构复用 `conf/common.proto`）+ **etcd 远程业务配置**（`ley/configs/entry/config.yaml`，支持 watch 热更）
+- **服务发现**：复用 etcd registry（`pkg/infra.NewEtcdClient`）解析 auth/blog gRPC 端点
+- **共享库**：`pkg/meta`（用户上下文传递，**必须复用**——handler 内 `meta.NewClientCtx` 注入 gRPC metadata）、`pkg/jwt`（黑名单/密钥）、`pkg/log`、`pkg/trace`、`pkg/infra`
+- **用户上下文**：JWT 解析出的 UserID/Role 通过 `pkg/meta` 传入 gRPC metadata（`x-md-global-`），**禁止在 handler 里裸用 `ctx.Value`**
+
+### 生成/构建（参考 gin-template 模式）
+
+```
+app/entry/
+├── cmd/entry/              # 入口（对齐微服务 cmd 布局）
+│   ├── main.go             # 入口（flag + config + log + wire + 优雅退出）
+│   ├── app.go              # MainApp 封装（Engine + ServiceHub + 启动/Close）
+│   ├── wire.go / wire_gen.go   # Wire DI（沿用 gin-template 风格）
+│   └── e2e_test.go         # 端到端硬化测试（fake gRPC + 内存黑名单）
+├── conf/                   # 配置加载（引导 Bootstrap + etcd 远程业务配置 watch）
+├── infra/                  # 基础设施：etcd 服务发现 / gRPC client（metadata.Client 透传）/ Redis 黑名单
+└── internal/
+    ├── common/             # 通用（request_meta、response 信封、grpc 错误映射）
+    ├── domain/proxy/       # 代理域：handler（每 API 一个）+ gRPC client 调用
+    └── router/             # 路由注册（冻结分类表）+ 中间件（auth/ratelimit/cors/metadata/logger）
+```
+
+- **Gin 路由 + Wire DI + Viper + zap**：参考 `CycleZero/gin-template`（作者自有模板，DDD-lite）
+- **响应封装**：handler 内显式返回信封（`Response{code,msg,data any}`），swag 注释嵌入类型引用——**不做中间件改写响应体**
+- **错误映射**：gRPC status → HTTP 状态 + 业务码，统一在 `internal/common/response` 处理
+- **禁止**：entry 里出现 `gorm`、`redis`、`minio` 等存储包 import（一致性检查要点）
+
 ## 配置体系
 
 两级配置：
@@ -127,6 +180,29 @@ ctx = pkg/meta.NewClientCtx(ctx, meta)
 
 **禁止使用原生 `ctx.Value`。**
 
+## 编码约定（源自 vcyuan-backend-app 规范，通用质量约束）
+
+> 以下为从 `vcyuan-backend-app/AGENTS.md` 提炼的**通用编码/架构约束**，适用于本项目所有 Go 代码（auth / blog / 未来服务）。仅取通用部分——迁移对齐铁律、DTM、服务清单等 vcyuan 特有内容**不适用**。
+
+### 架构原则（DDD + Clean Architecture）
+
+- **分层依赖方向**：`main → wire → service → biz → data`，领域层（biz）不依赖任何外部框架/基础设施
+- **接口定义在领域层**：repo 接口在 `biz/` 定义，实现在 `data/` 注入（`var _ biz.XxxRepo = (*xxxRepo)(nil)` 编译期断言）
+- **biz 层零 proto 依赖**：不 import `api/*/v1/*.pb.go`，不传 `*gorm.DB`；DTO 在 biz 层定义，`service` 层做 `<dto>ToProto/<proto>ToDTO` 转换，`data` 层做 `modelToBiz`/`bizToModel`（对齐现有 Auth/Blog 分层）
+
+### 编码风格
+
+- **简洁、优雅、规范**：优先表达意图而非堆砌代码；避免过度设计、重复代码、魔法数字；命名清晰自解释；小函数、单一职责
+- **中文注释**：业务代码必须带详细中文注释——说明方法意图、关键边界条件与分支原因，禁止无注释的裸逻辑
+- **中文错误消息**：所有 `error` 返回的消息一律中文（`ErrXxx = errors.New("中文")`）
+- **中文日志**：所有日志消息一律中文
+
+### 测试纪律（对齐现有风格）
+
+- **纯标准库断言**：不用 testify，`t.Fatalf`/`t.Errorf`
+- **Mock 内联**：无 `mocks/` 目录，mock 写在 `helpers_test.go`
+- **测试分层**：单元测试（内联 mock）+ 真库集成测试（`//go:build integration` + TestMain + sync.Once）；**禁止 Mock 模拟后用真实库绕过**
+
 ## 反模式（本项目特有）
 
 ### 🔴 致命级
@@ -137,6 +213,8 @@ ctx = pkg/meta.NewClientCtx(ctx, meta)
 | **禁止页面/组件直接裸调 `ofetch`/`fetch`** | 必须走 `hooks/use-*.ts → lib/api-client.ts`；**auth store 例外**（login/register/refresh/logout 内联避免循环依赖）|
 | **JWT Secret 必须 256 位随机** | 生产环境部署前必须替换 |
 | **生产环境关闭 Debug 日志** | `log.level: info` |
+| **biz 层禁止 import proto 生成代码** | biz 层不依赖 `api/*/v1/*.pb.go`；DTO 在 biz 层定义，`service` 层做 `<dto>ToProto/<proto>ToDTO` 转换（对齐 vcyuan 规范）|
+| **禁止 `Mock` 模拟后用真实库绕过** | 测试分层：单元测试用内联 mock，集成测试才连库（`//go:build integration`），不可混用 |
 
 ### 🟠 严重级
 
@@ -147,6 +225,11 @@ ctx = pkg/meta.NewClientCtx(ctx, meta)
 | **唯一性检查用 ON CONFLICT** | `INSERT ... ON CONFLICT DO NOTHING` 兜底，不靠"检查再操作" |
 | **`useCookie` + Pinia 是危险组合** | ~~旧 Nuxt 遗留~~ 前端现状：Token 存 Cookie（`ley_at`/`ley_rt`），Zustand 不作为 token 真实来源 |
 | **避免 KEYS 命令** | 用 SCAN 迭代，避免阻塞 Redis |
+| **仓库接口断言** | data 层实现须 `var _ biz.XxxRepo = (*xxxRepo)(nil)` 编译期断言（对齐 vcyuan 规范）|
+| **DTO 转换防漂移** | `modelToBiz`/`bizToModel`/`ToProto` 纯函数不掺业务逻辑；关键 DTO 配严格对比测试 |
+| **哨兵错误集中定义** | biz 层 `var ErrXxx = errors.New("中文")`，经错误码映射，禁止散落 `fmt.Errorf` magic |
+| **日志分级纪律** | Debug（细节默认关）/ Info（业务路径）/ Warn（可恢复异常/降级/重试/限流）/ Error（仅真故障）|
+| **热路径禁用 Error** | 高频调用（详情/列表/搜索）异常用 **Warn**，防 Error 刷屏（对齐 vcyuan 热路径规则）|
 
 ### 🟡 业务约束
 
