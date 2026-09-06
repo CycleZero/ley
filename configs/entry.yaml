@@ -1,0 +1,62 @@
+# ================================
+# Ley — Entry 入口服务配置模板
+# ================================
+# 本地开发：复制到 ./data/entry/configs/config.yaml
+# 生产部署：引导配置同上（服务器 data 目录）；业务配置（jwt/redis/cors/ratelimit）
+#           经 etcd 下发，路径 /ley/configs/entry/config.yaml（用 scripts/seed-etcd.sh 种子）
+# 启动命令：./entry（默认 -conf ./data/entry/configs，无需显式传参）
+
+# ================================
+# Bootstrap 配置（本地读取）
+# ================================
+server:
+  http:
+    network: tcp
+    # ⚠️ T13 与 gateway 共存阶段用 :8003（:8000 被 gateway 占用，:8001/:8002 被
+    # auth/blog HTTP 占用）；T14 gateway 退役后改回 0.0.0.0:8000 成为唯一入口。
+    addr: 0.0.0.0:8003
+    timeout: 3s
+
+log:
+  level: Debug                # Debug | Info | Warn | Error（生产用 Info）
+  path: ./data/entry/logs     # 日志文件目录
+  mode: Dev                   # Dev=控制台输出, Prod=JSON文件
+
+etcd:
+  endpoints:
+    - 127.0.0.1:2379          # etcd（服务发现 + 远程业务配置）
+
+trace:
+  endpoint: ""                # OTLP 端点，留空则跳过链路追踪初始化
+
+# ================================
+# 服务业务配置（etcd 下发 ley/configs/entry/config.yaml，结构对齐
+# app/entry/internal/conf/remote.go 的 RemoteConfig；本地此段仅供对照/单测）
+# ================================
+# jwt:
+#   secret: "change-me-in-production-use-256bit-random-key"   # ⚠️ 必须与 auth 完全一致（只校验不签发）
+#   issuer: "ley-auth"
+#   access_ttl: 900s
+#   refresh_ttl: 604800s
+# redis:
+#   host: 127.0.0.1
+#   port: 6379
+#   password: ""
+#   db: 0                     # 与 auth 一致（JWT 黑名单共用 db0）
+# cors:
+#   allow_origins:
+#     - "*"
+#   allow_methods:
+#     - GET
+#     - POST
+#     - PUT
+#     - DELETE
+#     - OPTIONS
+#   allow_headers:
+#     - Origin
+#     - Content-Type
+#     - Authorization
+#   max_age: 86400
+# ratelimit:
+#   rps: 100
+#   burst: 200

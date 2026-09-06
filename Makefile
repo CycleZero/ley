@@ -93,6 +93,16 @@ build-auth:
 build-blog:
 	mkdir -p bin/ && go build -o ./bin/blog ./app/blog/cmd/blog
 
+.PHONY: build-entry
+# 构建 entry 入口服务
+build-entry:
+	mkdir -p bin/ && go build -o ./bin/entry ./app/entry/cmd/entry
+
+.PHONY: run-entry
+# 本地运行 entry 入口服务（开发模式）
+run-entry:
+	go run ./app/entry/cmd/entry -conf ./data/entry/configs
+
 .PHONY: build-gateway
 # build gateway service (separate module)
 build-gateway:
@@ -175,5 +185,10 @@ docker-up:
 # stop all services
 docker-down:
 	docker-compose down
+
+.PHONY: docker-build-entry
+# 构建 entry 入口服务镜像（单独构建，参照 docker-build 全量构建）
+docker-build-entry:
+	docker-compose build entry
 
 .DEFAULT_GOAL := help
