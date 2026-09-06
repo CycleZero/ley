@@ -58,7 +58,7 @@
 
 包含两个串行 Job：
 
-1. **build-frontend** — `pnpm generate` 生成静态站点，上传 Artifact
+1. **build-frontend** — `pnpm build` 构建 React SPA，上传 Artifact（`web/dist`）
 2. **deploy-frontend** — 从 Artifact 下载，rsync 增量同步到前端服务器 Nginx 目录，远程 reload nginx
 
 ---
@@ -79,7 +79,7 @@
 | `FRONTEND_SERVER_USER` | **前端**SSH 用户名（可选，默认与后端共用） | `root` |
 | `FRONTEND_SERVER_PORT` | **前端**SSH 端口（可选，默认 22） | `22` |
 | `FRONTEND_DEPLOY_PATH` | **前端**Nginx 根目录（可选，默认 `/var/www/ley`） | `/usr/share/nginx/html/ley` |
-| `NUXT_PUBLIC_API_BASE` | 前端构建时的 API 基地址（可选，默认 `https://api.blog.poyuan233.cn`） | `https://api.yoursite.com` |
+| `VITE_API_BASE` | 前端 API 基地址（可选；React 纯 SPA 无 SSR，构建时注入） | `https://api.yoursite.com` |
 | `HARBOR_REGISTRY` | Harbor 仓库地址（不含协议前缀） | `harbor.example.com:8088` |
 | `HARBOR_USERNAME` | Harbor 登录用户名 | `poyuan` |
 | `HARBOR_PASSWORD` | Harbor 登录密码 | （你的 Harbor 密码） |

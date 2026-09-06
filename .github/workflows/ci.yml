@@ -108,16 +108,13 @@ jobs:
 
       - name: Build frontend
         working-directory: ./web
-        env:
-          # CI 构建时使用占位地址，实际部署时由服务器环境变量覆盖
-          NUXT_PUBLIC_API_BASE: https://api.blog.poyuan233.cn
         run: pnpm build
 
       - name: Upload frontend build
         uses: actions/upload-artifact@v4
         with:
           name: frontend-dist
-          path: web/.output/public
+          path: web/dist
           retention-days: 7
 
   # =============================================================================

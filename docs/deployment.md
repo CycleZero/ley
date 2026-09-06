@@ -345,89 +345,67 @@ curl http://127.0.0.1:8000/api/v1/site/config
 
 ## 五、前端部署
 
-### 5.1 构建生产版本
+> **当前状态（2026-09）**：前端为 **React 19 纯 SPA**（目录 `web/`，Vite 8 构建），无 SSR——产物为 `web/dist/` 静态文件，用 Nginx 等静态托管即可。旧 Nuxt 4 已删除。
 
-**在本地或 CI 环境中构建：**
+### 5.1 构建生产版本
 
 ```bash
 cd web
 
-# 安装依赖
+# 安装依赖（pnpm 10+）
 pnpm install
 
-# 设置生产环境 API 地址
-export NUXT_PUBLIC_API_BASE=https://yourdomain.com
-
-# 构建（生成 .output/ 目录）
+# 构建（tsc -b && vite build，输出 dist/）
 pnpm build
 ```
 
-### 5.2 部署方式选择
+### 5.2 部署方式：静态托管（唯一方式，纯 SPA）
 
-#### 方式 A：Node.js 服务器（推荐，支持 SSR）
+**推荐 Nginx 直接托管 `web/dist/`（复用 CD 工作流产物 `frontend-dist`）：**
 
-```bash
-# 在服务器上
-cd ~/ley/web
+```nginx
+# /etc/nginx/sites-available/ley-web.conf
+server {
+    listen 443 ssl http2;
+    server_name blog.yourdomain.com;
 
-# 复制构建产物
-scp -r .output user@server:/opt/ley/web/
+    root /var/www/ley;                # web/dist 解压至此
+    index index.html;
 
-# 在服务器上启动
-npm install -g pm2
-cd /opt/ley/web/.output/server
-pm2 start index.mjs --name ley-web -i max
+    # SPA fallback：所有前端路由交给 index.html
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
 
-# 或使用 nuxt preview（仅测试）
-node .output/server/index.mjs
-```
+    # 静态资源长期缓存（Vite 产物带 hash）
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
 
-**PM2 配置** `ecosystem.config.js`：
-
-```javascript
-module.exports = {
-  apps: [{
-    name: 'ley-web',
-    script: './.output/server/index.mjs',
-    instances: 'max',
-    exec_mode: 'cluster',
-    env: {
-      NUXT_PUBLIC_API_BASE: 'https://yourdomain.com',
-      PORT: 3000,
-      NODE_ENV: 'production',
-    },
-    max_memory_restart: '512M',
-    error_file: './logs/err.log',
-    out_file: './logs/out.log',
-    log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
-  }],
+    # API 反向代理（客户端请求同源 /api/v1）
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
 }
 ```
 
 ```bash
-pm2 start ecosystem.config.js
-pm2 save
-pm2 startup  # 生成开机自启脚本
+# 服务器上部署
+scp -r frontend-dist/* user@server:/var/www/ley/
+sudo systemctl reload nginx
 ```
 
-#### 方式 B：静态托管（纯 SPA，无 SSR）
+> **API 地址说明**：SPA 通过同源 `/api/v1` 访问 Gateway（见 vite.config.ts 代理与 Nginx `/api/` 反代）；如需 Web-API 基址注入，请在构建时提供 `VITE_API_BASE` 环境变量（可选，默认同源）。
 
-如果你不需要 SSR：
+### 5.3 Docker 部署前端（可选）
 
-```bash
-# 构建静态站点
-npx nuxt generate
-
-# 产物在 .output/public/
-# 用 Nginx 直接托管，或上传到 CDN / OSS
-```
-
-#### 方式 C：Docker 部署前端
-
-创建 `web/Dockerfile`：
+纯静态文件只需 Nginx 容器：
 
 ```dockerfile
-# 构建阶段
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
@@ -435,20 +413,15 @@ RUN npm install -g pnpm && pnpm install
 COPY . .
 RUN pnpm build
 
-# 运行阶段
-FROM node:20-alpine
-WORKDIR /app
-COPY --from=builder /app/.output ./
-ENV NUXT_PUBLIC_API_BASE=https://yourdomain.com
-ENV PORT=3000
-EXPOSE 3000
-CMD ["node", "server/index.mjs"]
+FROM nginx:alpine
+COPY --from=builder /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 ```
 
 ```bash
 cd web
-docker build -t ley-web:latest .
-docker run -d -p 127.0.0.1:3000:3000 --name ley-web ley-web:latest
+docker build -t ley-frontend:latest .
+docker run -d -p 127.0.0.1:3000:3000 --name ley-frontend ley-frontend:latest
 ```
 
 ## 六、反向代理配置
@@ -718,19 +691,15 @@ services:
       - auth
       - blog
 
-  # ===== 前端（可选，也可独立部署） =====
+  # ===== 前端（纯 SPA 静态托管，通常用 Nginx 独立部署，见第五章；此处为可选容器方案） =====
   web:
     build:
       context: ./web
       dockerfile: Dockerfile
-    image: ley-web:latest
-    container_name: ley-web
+    image: ley-frontend:latest
+    container_name: ley-frontend
     ports:
       - "127.0.0.1:3000:3000"
-    environment:
-      - NUXT_PUBLIC_API_BASE=https://yourdomain.com
-      - NODE_ENV=production
-      - PORT=3000
     networks:
       - ley-network
     restart: unless-stopped
@@ -791,8 +760,9 @@ cd ~/ley && git pull
 make docker-build
 sudo docker compose up -d
 
-# 前端更新
+# 前端更新（重新构建静态产物 → 同步到 Nginx 根目录）
 cd ~/ley/web && git pull
 pnpm install && pnpm build
-pm2 reload ley-web
+rsync -av --delete dist/ /var/www/ley/
+sudo systemctl reload nginx
 ```

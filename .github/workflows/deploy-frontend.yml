@@ -45,17 +45,15 @@ jobs:
         working-directory: ./web
         run: pnpm install --frozen-lockfile
 
-      - name: Generate static site
+      - name: Build frontend
         working-directory: ./web
-        env:
-          NUXT_PUBLIC_API_BASE: ${{ secrets.NUXT_PUBLIC_API_BASE || 'https://api.blog.poyuan233.cn' }}
-        run: pnpm generate
+        run: pnpm build
 
       - name: Upload frontend dist
         uses: actions/upload-artifact@v4
         with:
           name: frontend-dist
-          path: web/.output/public
+          path: web/dist
           retention-days: 1
 
   # =============================================================================

@@ -5,7 +5,7 @@
 
 ## 概述
 
-Ley 是一个个人博客平台，采用 Go/Kratos 微服务单体仓库 + React 19 SPA 前端（`ley-web/`）。Gateway 作为 HTTP 入口网关，gRPC 转发到 Auth（认证）和 Blog（博客）服务。
+Ley 是一个个人博客平台，采用 Go/Kratos 微服务单体仓库 + React 19 SPA 前端（`web/`）。Gateway 作为 HTTP 入口网关，gRPC 转发到 Auth（认证）和 Blog（博客）服务。
 
 ## 结构
 
@@ -20,7 +20,7 @@ ley/
 │   ├── auth/               # 认证服务 — 标准 Kratos DDD（见下方分层）
 │   ├── blog/               # 博客服务 — 标准 Kratos DDD（见下方分层）
 │   └── gateway/            # API 网关 — 非 DDD 结构（见 gateway/AGENTS.md）
-├── ley-web/                # React 19 SPA 前端（Vite 8，2026-07 由 Nuxt 4 重构而来）
+├── web/                # React 19 SPA 前端（Vite 8，2026-07 由 Nuxt 4 重构而来）
 │   └── src/
 │       ├── pages/          # 页面（前台 + /admin 后台）
 │       ├── components/     # 布局 + 业务组件（layout/、RequireAuth、RequireAdmin）
@@ -69,12 +69,12 @@ ley/
 | 标签/分类 | `app/blog/internal/biz/tag.go` | 树形分类，循环引用检测 |
 | 文件上传 | `app/blog/internal/biz/file.go` | MinIO 直传、MIME 校验 |
 | 网关路由/中间件 | `app/gateway/proxy/`、`app/gateway/middleware/` | JWT/CORS/限流/熔断/链路追踪 |
-| 前端 API 客户端 | `ley-web/src/lib/api-client.ts` | ofetch：Token 注入、401 单飞刷新、`{code,msg,data}` 解包 |
-| 前端数据获取 | `ley-web/src/hooks/use-*.ts` | TanStack Query（tags/categories staleTime 60s） |
-| 前端页面 | `ley-web/src/pages/` | 文件路由，含 `/admin` 后台 |
-| 前端状态管理 | `ley-web/src/stores/` | Zustand（auth、ui、draft） |
-| 前端路由/守卫 | `ley-web/src/routes.tsx` | React Router v7，RequireAuth/RequireAdmin |
-| 设计 token | `ley-web/src/styles/globals.css` | 现代极简（Cloudreve 参考）CSS 变量 |
+| 前端 API 客户端 | `web/src/lib/api-client.ts` | ofetch：Token 注入、401 单飞刷新、`{code,msg,data}` 解包 |
+| 前端数据获取 | `web/src/hooks/use-*.ts` | TanStack Query（tags/categories staleTime 60s） |
+| 前端页面 | `web/src/pages/` | 文件路由，含 `/admin` 后台 |
+| 前端状态管理 | `web/src/stores/` | Zustand（auth、ui、draft） |
+| 前端路由/守卫 | `web/src/routes.tsx` | React Router v7，RequireAuth/RequireAdmin |
+| 设计 token | `web/src/styles/globals.css` | 现代极简（Cloudreve 参考）CSS 变量 |
 | 配置 Proto | `conf/common.proto`、`app/*/internal/conf/` | 引导配置结构定义 |
 | Docker 编排 | `docker-compose.yml` | host 网络模式，3 服务 |
 | GitHub Actions | `.github/workflows/` | CI（构建+测试）+ CD（前后端独立部署） |
@@ -207,7 +207,7 @@ cd ley-web && pnpm lint      # oxlint
 ## 注意事项
 
 - **前端是纯 SPA**：CD 部署 `pnpm build` 静态产物 → Nginx `try_files $uri /index.html`（非 SSR）
-- **开发代理**：`/api` → `http://localhost:8000`（ley-web/vite.config.ts）
+- **开发代理**：`/api` → `http://localhost:8000`（web/vite.config.ts）
 - **评论系统已删除**：后端评论模块已移除（commit 8da75c36），前端不规划评论功能；`docs/design.md` 中评论设计已过时
 - **AGENTS.md 已更新**：旧 Nuxt 4 描述作废，`docs/frontend-design.md` 仅作需求参考
 - **基础镜像依赖**：Docker 构建前必须运行 `./build-deploy-image.sh` 构建 `ley-builder:v1` 和 `ley-runtime:v1`，或从 GHCR 拉取
