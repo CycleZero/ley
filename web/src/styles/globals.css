@@ -1,0 +1,355 @@
+@import "tailwindcss";
+
+/* ==================================================================
+   设计 Token — 「蓝白科技 · 干净留白」
+   来源：docs/frontend-redesign-spec.md §2/§3 + /tmp/opencode/mock-d1-blue-tech/index-v4.html
+   策略：别名收敛 —— 保留全部旧变量名（JSX 以 var(--xxx) 引用），仅收敛其值为蓝白 palette；
+        新增规范 token 供新 markup 使用。
+   ================================================================== */
+
+/* ===== 规范 Token（新增，供新 markup 使用） ===== */
+:root {
+  /* 背景 */
+  --bg-page: #fafcff;
+
+  /* 品牌蓝 */
+  --accent-blue: #3b82f6;
+  --accent-blue-hover: #2f6fd0;
+  --blue-soft: #7db4f0;
+  --cyan: #38bdf8;
+
+  /* 点缀色（纪律：独立 token，仅点缀级使用，不参与大背景/大文字） */
+  --teal: #5eead4;        /* 薄荷青：chip、状态圆点、图表尾段 */
+  --teal-ink: #0d9488;
+  --amber: #f0b35e;       /* 琥珀金：太阳、播放钮、1-2 处渐变点缀 */
+  --amber-deep: #d98d2f;
+  --lav: #a78bfa;         /* 粉紫：仅头像渐变（≤46px） */
+  --grad-avatar: linear-gradient(140deg, #57a2f2 10%, #9f9bf0 60%, #f2b3c9 100%); /* 头像渐变圆（蓝→紫→粉，仅 46px 头像） */
+
+  /* 文字（深蓝灰，不用纯黑） */
+  --ink: #1d3a5f;
+  --ink-2: #51799f;
+  --ink-3: #8aa8c4;
+
+  /* 卡片材质 */
+  --border-card: rgba(30, 80, 160, 0.10);
+  --shadow-card: 0 4px 16px rgba(50, 80, 140, 0.06);
+  --radius-card: 22px;
+  --radius-chip: 18px;
+
+  /* 字体 */
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+
+  /* ===== 旧变量别名映射（deprecated alias 过渡层） =====
+     ⚠️ 名称保留（JSX 大量引用），仅值收敛为蓝白 palette；新代码请改用上方规范 Token。 */
+  --bg-global: #fafcff;                             /* = --bg-page */
+  --bg-card: #ffffff;                               /* 实白卡主体（非玻璃透色） */
+  --bg-input: #ffffff;
+  --bg-hover: rgba(59, 130, 246, 0.06);             /* 蓝灰 hover */
+  --text-primary: #1d3a5f;                          /* = --ink */
+  --text-secondary: #51799f;                        /* = --ink-2 */
+  --text-tertiary: #8aa8c4;                         /* = --ink-3 */
+  --accent: #3b82f6;                                /* = --accent-blue */
+  --accent-hover: #2f6fd0;                          /* = --accent-blue-hover */
+  --accent-subtle: rgba(59, 130, 246, 0.08);
+  --border: rgba(30, 80, 160, 0.10);                /* = --border-card */
+  --border-light: rgba(30, 80, 160, 0.06);
+  --radius-xl: 22px;                                /* = --radius-card */
+  --radius-lg: 18px;                                /* = --radius-chip */
+  --shadow-sm: 0 1px 2px rgba(50, 80, 140, 0.05);
+  --shadow-md: 0 4px 16px rgba(50, 80, 140, 0.06);  /* = --shadow-card */
+  --shadow-lg: 0 10px 28px rgba(50, 80, 140, 0.10);
+}
+
+/* Tailwind v4：让 font-mono 工具类 = 等宽栈（数据/时间/统计） */
+@theme {
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+}
+
+/* ===== 暗色模式（本阶段：最小可读映射，深蓝灰非纯黑） =====
+   spec §2.3：暗色为第二阶段细化，此处仅保证 ThemeToggle 可读。 */
+[data-theme="dark"] {
+  --bg-global: #0f1b33;
+  --bg-card: #152238;
+  --bg-input: #1c2c47;
+  --bg-hover: rgba(120, 180, 255, 0.10);
+
+  --text-primary: #e8f0fe;
+  --text-secondary: #9fb4d8;
+  --text-tertiary: #6a7fa5;
+
+  --accent: #5c9bff;
+  --accent-hover: #7ab0ff;
+  --accent-subtle: rgba(92, 155, 255, 0.15);
+
+  --border: rgba(120, 170, 255, 0.18);
+  --border-light: rgba(120, 170, 255, 0.10);
+
+  /* 阴影改深蓝 */
+  --shadow-sm: 0 1px 2px rgba(0, 8, 25, 0.45);
+  --shadow-md: 0 4px 16px rgba(0, 8, 25, 0.55);
+  --shadow-lg: 0 10px 28px rgba(0, 8, 25, 0.6);
+
+  /* --radius-* 保持不变（继承 :root） */
+}
+
+/* 暗色下实白卡将不可读，覆盖为深蓝卡 */
+[data-theme="dark"] .card {
+  background: var(--bg-card);
+  border-color: var(--border);
+  box-shadow: var(--shadow-md);
+}
+
+/* ===== 全局基础样式 ===== */
+html {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg-global);
+  color: var(--text-primary);
+}
+
+/* ===== 自定义滚动条（蓝灰 thumb） ===== */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-track:hover {
+  background: var(--border-light);
+}
+::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: rgba(120, 160, 220, 0.4);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+/* ===== 工具类：card 规范材质（spec §3，实白 + 描边 + 轻阴影） ===== */
+@utility card {
+  border-radius: var(--radius-card);
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--border-card);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), var(--shadow-card);
+}
+
+.card-hover {
+  transition: transform 0.28s ease, box-shadow 0.28s ease, border-color 0.28s ease;
+}
+.card-hover:hover {
+  transform: translateY(-3px);
+  border-color: rgba(30, 80, 160, 0.22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 10px 30px rgba(50, 80, 140, 0.12), 0 0 20px rgba(59, 130, 246, 0.14);
+}
+
+/* 头像渐变圆：蓝→紫→粉，仅用于 ≤46px 头像（lav 色相纪律） */
+@utility avatar-grad {
+  background: var(--grad-avatar);
+}
+
+/* ===== 文章正文 Markdown 样式（类名/.shiki 机制原封不动，仅配色适配蓝白） ===== */
+.markdown-body {
+  font-size: 0.9375rem;
+  line-height: 1.8;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.markdown-body > *:first-child {
+  margin-top: 0 !important;
+}
+.markdown-body > *:last-child {
+  margin-bottom: 0 !important;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  margin: 1.8em 0 0.8em;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.markdown-body h1 {
+  font-size: 1.6em;
+  padding-bottom: 0.4em;
+  border-bottom: 1px solid var(--border-light);
+}
+.markdown-body h2 {
+  font-size: 1.35em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--border-light);
+}
+.markdown-body h3 {
+  font-size: 1.15em;
+}
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  font-size: 1em;
+}
+
+.markdown-body p {
+  margin: 0.9em 0;
+}
+
+.markdown-body a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.markdown-body a:hover {
+  border-bottom-color: var(--accent);
+}
+
+.markdown-body strong {
+  font-weight: 600;
+}
+.markdown-body em {
+  font-style: italic;
+}
+.markdown-body del {
+  color: var(--text-tertiary);
+}
+
+.markdown-body blockquote {
+  margin: 1.2em 0;
+  padding: 0.4em 1em;
+  border-left: 3px solid var(--accent);
+  background: rgba(59, 130, 246, 0.05);
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+  color: var(--text-secondary);
+}
+.markdown-body blockquote p {
+  margin: 0.4em 0;
+}
+
+.markdown-body ul,
+.markdown-body ol {
+  margin: 0.9em 0;
+  padding-left: 1.6em;
+}
+.markdown-body ul {
+  list-style: disc;
+}
+.markdown-body ol {
+  list-style: decimal;
+}
+.markdown-body li {
+  margin: 0.3em 0;
+}
+.markdown-body li::marker {
+  color: var(--text-tertiary);
+}
+.markdown-body input[type="checkbox"] {
+  margin-right: 0.4em;
+  accent-color: var(--accent);
+}
+
+.markdown-body code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+}
+
+/* 行内代码 */
+.markdown-body :not(pre) > code {
+  padding: 0.15em 0.4em;
+  border-radius: 0.375rem;
+  background: var(--bg-hover);
+  color: var(--accent);
+  border: 1px solid var(--border-light);
+}
+
+/* 代码块 */
+.markdown-body pre {
+  margin: 1.2em 0;
+  padding: 1em 1.2em;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--border-light);
+  background: var(--bg-input);
+  overflow-x: auto;
+  font-size: 0.85rem;
+  line-height: 1.7;
+}
+.markdown-body pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: inherit;
+}
+.markdown-body .shiki {
+  background: transparent !important;
+}
+.markdown-body .shiki span {
+  color: var(--shiki-light) !important;
+}
+html[data-theme="dark"] .markdown-body .shiki span {
+  color: var(--shiki-dark) !important;
+}
+
+.markdown-body table {
+  width: 100%;
+  margin: 1.2em 0;
+  border-collapse: collapse;
+  font-size: 0.9em;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+}
+.markdown-body th,
+.markdown-body td {
+  padding: 0.55em 0.9em;
+  border: 1px solid var(--border);
+  text-align: left;
+}
+.markdown-body th {
+  background: var(--bg-hover);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.markdown-body tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--bg-hover) 50%, transparent);
+}
+
+.markdown-body hr {
+  margin: 2em 0;
+  border: none;
+  border-top: 1px solid var(--border);
+}
+
+.markdown-body img {
+  max-width: 100%;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-light);
+}
+
+.markdown-body details {
+  margin: 1.2em 0;
+  padding: 0.8em 1em;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+}
+.markdown-body summary {
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.markdown-body kbd {
+  padding: 0.15em 0.5em;
+  border-radius: 0.375rem;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  background: var(--bg-hover);
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+}
