@@ -45,7 +45,7 @@ var (
 	ctrlName          string
 	ctrlService       string
 	discoveryDSN      string
-	proxyAddrs        = newSliceVar(":8080")
+	proxyAddrs        = newSliceVar(":8000")
 	proxyConfig       string
 	priorityConfigDir string
 	withDebug         bool
@@ -75,12 +75,26 @@ func init() {
 	rand.Seed(uint64(time.Now().Nanosecond()))
 
 	flag.BoolVar(&withDebug, "debug", false, "enable debug handlers")
-	flag.Var(&proxyAddrs, "addr", "proxy address, eg: -addr 0.0.0.0:8080")
+	flag.Var(&proxyAddrs, "addr", "proxy address, eg: -addr 0.0.0.0:8000")
 	flag.StringVar(&proxyConfig, "conf", "./data/gateway/configs/config.yaml", "config path, eg: -conf config.yaml")
 	flag.StringVar(&priorityConfigDir, "conf.priority", "", "priority config directory, eg: -conf.priority ./canary")
 	flag.StringVar(&ctrlName, "ctrl.name", os.Getenv("ADVERTISE_NAME"), "control gateway name, eg: gateway")
 	flag.StringVar(&ctrlService, "ctrl.service", "", "control service host, eg: http://127.0.0.1:8000")
 	flag.StringVar(&discoveryDSN, "discovery.dsn", "etcd://127.0.0.1:2379", "discovery dsn, eg: consul://127.0.0.1:7070?token=secret&datacenter=prod")
+}
+
+// healthHandler 在代理之前拦截 /healthz 与 /readyz 并直接返回 200
+func healthHandler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/healthz", "/readyz":
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"status":"ok"}`))
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func makeDiscovery() registry.Discovery {
@@ -158,6 +172,8 @@ func main() {
 		}
 		serverHandler = debug.MashupWithDebugHandler(p)
 	}
+	// B-303: 网关自身健康端点（静态 200，不依赖后端），供负载均衡探活
+	serverHandler = healthHandler(serverHandler)
 	servers := make([]transport.Server, 0, len(proxyAddrs.Get()))
 	for _, addr := range proxyAddrs.Get() {
 		servers = append(servers, server.NewProxy(serverHandler, addr))

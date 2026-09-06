@@ -1,0 +1,136 @@
+# ================================
+# Ley — Gateway 路由配置模板（唯一基线）
+# ================================
+# 本地/部署：复制到 ./data/gateway/configs/config.yaml（或经 etcd/控制面下发）
+# 协议说明：HTTP 直连后端 Kratos HTTP 端口（非 gRPC transcoder 模式）
+# 注意：jwt.redisAddr 须与 auth 服务共用同一 Redis 实例与库(db0)——
+#       黑名单校验依赖它，缺失时吊销检查不启用（向后兼容）
+# Ley Blog — 网关路由配置
+name: ley-gateway
+version: v1
+
+middlewares:
+  - name: tracing
+    options:
+      '@type': type.googleapis.com/gateway.middleware.tracing.v1.Tracing
+      httpEndpoint: '127.0.0.1:4318'
+      insecure: true
+  - name: logging
+  - name: cors
+    options:
+      '@type': type.googleapis.com/gateway.middleware.cors.v1.Cors
+      allowCredentials: true
+      allowOrigins:
+        - "*"
+      allowMethods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        - OPTIONS
+      allowHeaders:
+        - Origin
+        - Content-Type
+        - Authorization
+  - name: jwt
+    options:
+      '@type': type.googleapis.com/gateway.middleware.jwt.v1.JWT
+      signingKey: "change-me-in-production-use-256bit-random-key"
+      issuer: "ley-gateway"
+      redisAddr: "127.0.0.1:6379"
+      redisDb: 0
+      skipPaths:
+        - /api/v1/auth/register
+        - /api/v1/auth/login
+        - /api/v1/auth/refresh
+        - /api/v1/articles
+        - /api/v1/articles/search
+        - /api/v1/tags
+        - /api/v1/categories
+        - /api/v1/site/config
+        - /api/v1/site/backgrounds
+        - /api/v1/site/music/playlist
+        - /api/v1/files/presigned-upload
+        - /healthz
+        - /readyz
+      required: false
+      enabled: true
+  - name: ratelimit
+    options:
+      '@type': type.googleapis.com/gateway.middleware.ratelimit.v1.RateLimit
+      redisAddr: "127.0.0.1:6379"
+      redisDb: 0
+      limitStatusCode: 429
+      limitMessage: "请求过于频繁，请稍后再试"
+      rules:
+        # 注册接口：每 IP 每小时 3 次
+        - pattern: "/api/v1/auth/register"
+          maxRequests: 10
+          window: 3600s
+          keyBy: "ip"
+        # 登录接口：每 IP 每分钟 10 次
+        - pattern: "/api/v1/auth/login"
+          maxRequests: 10
+          window: 60s
+          keyBy: "ip"
+        # 全站 API：每 IP 每秒 100 次
+        - pattern: "*"
+          maxRequests: 100
+          window: 1s
+          keyBy: "ip"
+  - name: wrapresp
+    options:
+      '@type': type.googleapis.com/gateway.middleware.wrapresp.v1.WrapResp
+      success_code: 0
+      success_msg: "ok"
+      error_msg_field: "message"
+# =============================================================================
+# Auth 服务 — gRPC :9001
+# =============================================================================
+endpoints:
+  - path: /api/v1/auth*
+    timeout: 3s
+    protocol: HTTP
+    backends:
+      - target: 'discovery:///ley.auth'
+
+  - path: /api/v1/users*
+    timeout: 3s
+    protocol: HTTP
+    backends:
+      - target: 'discovery:///ley.auth'
+
+
+# =============================================================================
+# Blog 服务 — gRPC :9002
+# =============================================================================
+  - path: /api/v1/articles*
+    timeout: 3s
+    protocol: HTTP
+    backends:
+      - target: 'discovery:///ley.blog'
+
+  - path: /api/v1/tags*
+    timeout: 3s
+    protocol: HTTP
+    backends:
+      - target: 'discovery:///ley.blog'
+
+  - path: /api/v1/categories*
+    timeout: 3s
+    protocol: HTTP
+    backends:
+      - target: 'discovery:///ley.blog'
+
+  - path: /api/v1/files*
+    timeout: 10s
+    protocol: HTTP
+    backends:
+      - target: 'discovery:///ley.blog'
+
+  - path: /api/v1/site*
+    timeout: 3s
+    protocol: HTTP
+    backends:
+      - target: 'discovery:///ley.blog'
+

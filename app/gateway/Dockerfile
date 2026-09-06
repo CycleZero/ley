@@ -35,6 +35,6 @@ USER appuser
 
 VOLUME /app/data
 
-EXPOSE 52658
+EXPOSE 8000
 
-CMD ["./server", "-addr", "0.0.0.0:52658"]
+CMD ["./server", "-addr", "0.0.0.0:8000"]
