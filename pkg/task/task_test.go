@@ -55,12 +55,13 @@ func TestTaskQueue_Priority(t *testing.T) {
 		WorkerCount:  1, // 单工作器以确保顺序
 		MaxQueueSize: 100,
 	})
-	queue.Start()
-	defer queue.Stop()
 
 	var executionOrder []int
 
 	// 提交不同优先级的任务
+	// 注意：必须先提交全部任务再 Start——若 Start 后逐个提交，
+	// 空闲 worker 可能在更高优先级任务入队前抢先取走低优任务（时序竞态，CI 偶发）。
+	// 先入队后启动可保证三个任务都在堆中，worker 严格按优先级出队。
 	queue.SubmitFunc("low_priority", func() error {
 		executionOrder = append(executionOrder, 1)
 		return nil
@@ -75,6 +76,9 @@ func TestTaskQueue_Priority(t *testing.T) {
 		executionOrder = append(executionOrder, 2)
 		return nil
 	}, WithPriority(50))
+
+	queue.Start()
+	defer queue.Stop()
 
 	// 等待所有任务执行
 	time.Sleep(500 * time.Millisecond)
