@@ -142,7 +142,6 @@ func (m *mockArticleRepo) IncrementViewCount(ctx context.Context, id uint, delta
 	return nil
 }
 func (m *mockArticleRepo) UpdateTagsArticleCount(ctx context.Context, tagIDs []uint, delta int64) error { return nil }
-func (m *mockArticleRepo) FlushViewCounts(ctx context.Context, counts map[uint]int64) error { return nil }
 
 // ---- tag repo mock ----
 

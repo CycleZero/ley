@@ -58,7 +58,6 @@ type FileRepo interface {
 
 const (
 	MaxFileSize   = 10 * 1024 * 1024 // 10MB — 最大文件大小
-	MaxAvatarSize = 2 * 1024 * 1024  // 2MB  — 头像专用限制
 	MaxAttachSize = 50 * 1024 * 1024 // 50MB — 附件专用限制
 )
 

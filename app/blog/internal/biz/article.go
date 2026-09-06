@@ -118,7 +118,6 @@ type ArticleRepo interface {
 	UpdateTagsArticleCount(ctx context.Context, tagIDs []uint, delta int64) error
 
 	// 浏览量批量持久化（定时 flush 任务调用）
-	FlushViewCounts(ctx context.Context, counts map[uint]int64) error
 }
 
 // =============================================================================
