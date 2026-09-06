@@ -5,7 +5,7 @@
 | 工作流 | 文件 | 触发条件 | 用途 |
 |---|---|---|---|
 | **CI** | `.github/workflows/ci.yml` | `push` / `pull_request`（全量） | 编译检查、单元测试、前端构建、Docker 镜像构建验证 |
-| **CD - Backend** | `.github/workflows/deploy-backend.yml` | `push main` 且修改了**后端代码** | 构建并推送后端 Docker 镜像到 Harbor，SSH 部署到后端服务器 |
+| **CD - Backend** | `.github/workflows/deploy-backend.yml` | `push main` 且修改了**后端代码** | 构建并推送后端 Docker 镜像到 GHCR，SSH 部署到后端服务器 |
 | **CD - Frontend** | `.github/workflows/deploy-frontend.yml` | `push main` 且修改了**前端代码** | 构建 React SPA 静态产物（web/dist），rsync 部署到前端 Nginx 服务器 |
 
 > 💡 **设计原则**：CI 保持全量检查（编译不省），CD 按需触发（只改前端时不浪费后端镜像构建时间）。
@@ -18,7 +18,7 @@
 
 触发的工作流：
 - ✅ **CI** — 全量检查（backend + frontend + docker）
-- ✅ **CD - Backend** — 构建后端镜像 → 推送 Harbor → 部署后端服务器
+- ✅ **CD - Backend** — 构建后端镜像 → 推送 GHCR → 部署后端服务器
 - ❌ **CD - Frontend** — **不触发**
 
 ### 修改前端文件时（如 `web/src/pages/about.tsx`）
@@ -51,8 +51,8 @@
 
 包含两个串行 Job：
 
-1. **build-backend** — 构建 auth/blog/gateway/entry 镜像并推送到 Harbor（entry 为 T13 共存期接入，T14 切换后接替 gateway）
-2. **deploy-backend** — SSH 到后端服务器，从 Harbor 拉取镜像并重命名标签，docker-compose 重启
+1. **build-backend** — 构建 auth/blog/gateway/entry 镜像并推送到 GHCR（ghcr.io/cyclezero/ley/）
+2. **deploy-backend** — SSH 到后端服务器，从 GHCR 拉取镜像并 tag 为 latest，docker compose 重启
 
 ### CD - Frontend (`deploy-frontend.yml`)
 
@@ -80,11 +80,9 @@
 | `FRONTEND_SERVER_PORT` | **前端**SSH 端口（可选，默认 22） | `22` |
 | `FRONTEND_DEPLOY_PATH` | **前端**Nginx 根目录（可选，默认 `/var/www/ley`） | `/usr/share/nginx/html/ley` |
 | `VITE_API_BASE` | 前端 API 基地址（可选；React 纯 SPA 无 SSR，构建时注入） | `https://api.yoursite.com` |
-| `HARBOR_REGISTRY` | Harbor 仓库地址（不含协议前缀） | `harbor.example.com:8088` |
-| `HARBOR_USERNAME` | Harbor 登录用户名 | `poyuan` |
-| `HARBOR_PASSWORD` | Harbor 登录密码 | （你的 Harbor 密码） |
+| `GHCR_PAT` | GitHub Container Registry 个人访问令牌（服务器 pull 私有镜像用，需 read:packages 权限） | `ghp_xxx...` |
 
-> ⚠️ **安全提示**：所有 Harbor、服务器相关信息（地址、用户名、密码）均通过 Secrets 注入，**不会以任何形式暴露在仓库代码或工作流日志中**（GitHub Actions 会自动将 Secrets 值替换为 `***`）。
+> ⚠️ **安全提示**：所有 GHCR PAT、服务器相关信息均通过 Secrets 注入，**不会以任何形式暴露在仓库代码或工作流日志中**（GitHub Actions 会自动将 Secrets 值替换为 `***`）。
 
 > 💡 **简化配置**：如果前后端服务器共用同一套 SSH 密钥和用户名，可以只配置 `SSH_PRIVATE_KEY`、`SERVER_HOST`、`SERVER_USER`，前端部署会自动回退使用这些值。
 
@@ -108,7 +106,7 @@
    ```
    在 GitHub 上新建 Secret，名称为 `SSH_PRIVATE_KEY`（前后端共用）或分别配置 `SSH_PRIVATE_KEY` + `FRONTEND_SSH_PRIVATE_KEY`。
 
-4. **添加 Harbor Secrets**：`HARBOR_REGISTRY`、`HARBOR_USERNAME`、`HARBOR_PASSWORD`。
+4. **添加 GHCR Secret**：`GHCR_PAT`（GitHub → Settings → Developer settings → Personal access tokens，勾选 `read:packages`，仓库需在 org 设置中授权该 token 访问）。
 
 5. **添加服务器连接 Secrets**：`SERVER_HOST`、`FRONTEND_SERVER_HOST` 等。
 
@@ -130,11 +128,8 @@
 ### Q: CI 中 Docker 构建失败，提示 "host network mode" 不支持？
 A: `docker-compose.yml` 使用了 `network_mode: host`，这在 GitHub Actions 的 Ubuntu runner 上不可用。但 CI 工作流只执行 `docker build`（不运行容器），所以不影响。如果运行时测试需要网络，请改用端口映射模式。
 
-### Q: 如何切换到其他私有仓库（如阿里云 ACR、腾讯云 TCR）？
-A: 修改仓库 Secrets：
-- `HARBOR_REGISTRY` → 你的仓库地址（如 `registry.cn-hangzhou.aliyuncs.com`）
-- `HARBOR_USERNAME` / `HARBOR_PASSWORD` → 对应仓库的凭据
-- 修改 workflow 中的镜像路径前缀（默认是 `/ley/ley-auth`，根据你的仓库命名空间调整）
+### Q: 如何切换镜像仓库（如换到阿里云 ACR）？
+A: 修改 workflow 中 `ghcr.io/cyclezero/ley/` 前缀为你的仓库地址，并相应调整登录步骤与 `GHCR_PAT` secret。
 
 ### Q: 前端部署时 Nginx 重载失败？
 A: 确保 GitHub Actions 使用的 SSH 用户有 `sudo` 权限执行 `nginx -t` 和 `systemctl reload nginx`。如果用户不在 sudoers 中，需要在前端服务器上配置免密 sudo：

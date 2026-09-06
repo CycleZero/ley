@@ -15,10 +15,7 @@ services:
   # Gateway — API 网关 :8000
   # ================================
   gateway:
-    build:
-      context: .
-      dockerfile: app/gateway/Dockerfile
-    image: ley-gateway:latest
+    image: ghcr.io/cyclezero/ley/ley-gateway:latest
     container_name: ley-gateway
     network_mode: host
     volumes:
@@ -39,13 +36,7 @@ services:
   # Auth 服务 — :9001 (gRPC) / :8001 (HTTP)
   # ================================
   auth:
-    build:
-      context: .
-      dockerfile: app/auth/Dockerfile
-      args:
-        GOPROXY: https://goproxy.cn,direct
-        SERVICE_NAME: auth
-    image: ley-auth:latest
+    image: ghcr.io/cyclezero/ley/ley-auth:latest
     container_name: ley-auth
     network_mode: host
     volumes:
@@ -58,13 +49,7 @@ services:
   # Blog 服务 — :9002 (gRPC) / :8002 (HTTP)
   # ================================
   blog:
-    build:
-      context: .
-      dockerfile: app/blog/Dockerfile
-      args:
-        GOPROXY: https://goproxy.cn,direct
-        SERVICE_NAME: blog
-    image: ley-blog:latest
+    image: ghcr.io/cyclezero/ley/ley-blog:latest
     container_name: ley-blog
     network_mode: host
     volumes:
@@ -86,12 +71,7 @@ services:
   #   - T14 切换（gateway 退役）：从本文件删除 gateway 服务段，entry 引导配置
   #     恢复 0.0.0.0:8000，entry 即成为唯一 HTTP 入口。
   entry:
-    build:
-      context: .
-      dockerfile: app/entry/Dockerfile
-      args:
-        GOPROXY: https://goproxy.cn,direct
-    image: ley-entry:latest
+    image: ghcr.io/cyclezero/ley/ley-entry:latest
     container_name: ley-entry
     network_mode: host
     volumes:

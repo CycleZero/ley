@@ -27,11 +27,11 @@ on:
 
 jobs:
   # =============================================================================
-  # 构建后端 Docker 镜像并推送到 Harbor
+  # 构建后端 Docker 镜像并推送到 GitHub Container Registry (GHCR)
   #
-  # 基础镜像（ley-builder / ley-runtime）托管在 GitHub Container Registry，
-  # 利用 GitHub Actions 同机房内网极速拉取，无需走服务器出口带宽。
-  # 服务镜像构建后推送到 Harbor，服务器本地 pull 零外网 IO。
+  # 基础镜像（ley-builder / ley-runtime）与服务镜像（ley-auth/blog/gateway/entry）
+  # 全部托管在 ghcr.io/cyclezero/ley/。服务器部署时从 GHCR 直接 pull
+  # （无需 Harbor，也无需服务器本地构建）。
   # =============================================================================
   build-backend:
     name: Build Backend Images
@@ -42,19 +42,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Allow insecure Harbor registry
-        run: |
-          sudo mkdir -p /etc/docker
-          echo "{\"insecure-registries\":[\"${{ secrets.HARBOR_REGISTRY }}\"]}" | sudo tee /etc/docker/daemon.json
-          sudo systemctl restart docker || sudo service docker restart
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          buildkitd-config-inline: |
-            [registry."${{ secrets.HARBOR_REGISTRY }}"]
-              http = true
-              insecure = true
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -62,13 +51,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Log in to Harbor
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ secrets.HARBOR_REGISTRY }}
-          username: ${{ secrets.HARBOR_USERNAME }}
-          password: ${{ secrets.HARBOR_PASSWORD }}
 
       # ---------- Auth 服务镜像 ----------
       - name: Build and push auth
@@ -78,8 +60,8 @@ jobs:
           file: ./app/auth/Dockerfile
           push: true
           tags: |
-            ${{ secrets.HARBOR_REGISTRY }}/ley/ley-auth:latest
-            ${{ secrets.HARBOR_REGISTRY }}/ley/ley-auth:${{ github.sha }}
+            ghcr.io/cyclezero/ley/ley-auth:latest
+            ghcr.io/cyclezero/ley/ley-auth:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
@@ -97,8 +79,8 @@ jobs:
           file: ./app/blog/Dockerfile
           push: true
           tags: |
-            ${{ secrets.HARBOR_REGISTRY }}/ley/ley-blog:latest
-            ${{ secrets.HARBOR_REGISTRY }}/ley/ley-blog:${{ github.sha }}
+            ghcr.io/cyclezero/ley/ley-blog:latest
+            ghcr.io/cyclezero/ley/ley-blog:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
@@ -116,8 +98,8 @@ jobs:
           file: ./app/gateway/Dockerfile
           push: true
           tags: |
-            ${{ secrets.HARBOR_REGISTRY }}/ley/ley-gateway:latest
-            ${{ secrets.HARBOR_REGISTRY }}/ley/ley-gateway:${{ github.sha }}
+            ghcr.io/cyclezero/ley/ley-gateway:latest
+            ghcr.io/cyclezero/ley/ley-gateway:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-contexts: |
@@ -132,8 +114,8 @@ jobs:
           file: ./app/entry/Dockerfile
           push: true
           tags: |
-            ${{ secrets.HARBOR_REGISTRY }}/ley/ley-entry:latest
-            ${{ secrets.HARBOR_REGISTRY }}/ley/ley-entry:${{ github.sha }}
+            ghcr.io/cyclezero/ley/ley-entry:latest
+            ghcr.io/cyclezero/ley/ley-entry:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-contexts: |
@@ -141,7 +123,7 @@ jobs:
             ley-runtime:v1=docker-image://ghcr.io/cyclezero/ley/ley-runtime:latest
 
   # =============================================================================
-  # 部署后端到后端服务器（Docker + Harbor）
+  # 部署后端到后端服务器（从 GHCR 拉取镜像）
   # =============================================================================
   deploy-backend:
     name: Deploy Backend
@@ -170,9 +152,7 @@ jobs:
           SERVER_USER: ${{ secrets.SERVER_USER }}
           SERVER_PORT: ${{ secrets.SERVER_PORT || '2366' }}
           COMPOSE_PROJECT: ${{ secrets.COMPOSE_PROJECT || '/projects/ley' }}
-          HARBOR_REGISTRY: ${{ secrets.HARBOR_REGISTRY }}
-          HARBOR_USERNAME: ${{ secrets.HARBOR_USERNAME }}
-          HARBOR_PASSWORD: ${{ secrets.HARBOR_PASSWORD }}
+          GHCR_PAT: ${{ secrets.GHCR_PAT }}
         run: |
           echo "=== 部署后端到 $SERVER_HOST ==="
           ssh -p $SERVER_PORT $SERVER_USER@$SERVER_HOST "
@@ -182,20 +162,20 @@ jobs:
             echo '--- 拉取最新代码 ---'
             git pull origin main
 
-            echo '--- 登录 Harbor ---'
-            echo '$HARBOR_PASSWORD' | docker login $HARBOR_REGISTRY -u '$HARBOR_USERNAME' --password-stdin
+            echo '--- 登录 GHCR ---'
+            echo '$GHCR_PAT' | docker login ghcr.io -u CycleZero --password-stdin
 
-            echo '--- 拉取 Harbor 镜像 ---'
-            docker pull $HARBOR_REGISTRY/ley/ley-auth:${{ github.sha }}
-            docker pull $HARBOR_REGISTRY/ley/ley-blog:${{ github.sha }}
-            docker pull $HARBOR_REGISTRY/ley/ley-gateway:${{ github.sha }}
-            docker pull $HARBOR_REGISTRY/ley/ley-entry:${{ github.sha }}
+            echo '--- 拉取指定版本镜像 ---'
+            docker pull ghcr.io/cyclezero/ley/ley-auth:${{ github.sha }}
+            docker pull ghcr.io/cyclezero/ley/ley-blog:${{ github.sha }}
+            docker pull ghcr.io/cyclezero/ley/ley-gateway:${{ github.sha }}
+            docker pull ghcr.io/cyclezero/ley/ley-entry:${{ github.sha }}
 
-            echo '--- 重命名为本地标签 ---'
-            docker tag $HARBOR_REGISTRY/ley/ley-auth:${{ github.sha }} ley-auth:latest
-            docker tag $HARBOR_REGISTRY/ley/ley-blog:${{ github.sha }} ley-blog:latest
-            docker tag $HARBOR_REGISTRY/ley/ley-gateway:${{ github.sha }} ley-gateway:latest
-            docker tag $HARBOR_REGISTRY/ley/ley-entry:${{ github.sha }} ley-entry:latest
+            echo '--- 标记为 compose 引用的 latest ---'
+            docker tag ghcr.io/cyclezero/ley/ley-auth:${{ github.sha }} ghcr.io/cyclezero/ley/ley-auth:latest
+            docker tag ghcr.io/cyclezero/ley/ley-blog:${{ github.sha }} ghcr.io/cyclezero/ley/ley-blog:latest
+            docker tag ghcr.io/cyclezero/ley/ley-gateway:${{ github.sha }} ghcr.io/cyclezero/ley/ley-gateway:latest
+            docker tag ghcr.io/cyclezero/ley/ley-entry:${{ github.sha }} ghcr.io/cyclezero/ley/ley-entry:latest
 
             echo '--- 重启服务 ---'
             docker compose -f /projects/ley/docker-compose.yml down
