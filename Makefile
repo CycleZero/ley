@@ -31,15 +31,14 @@ echo:
 
 .PHONY: init
 # init env
-# 注意：kratos 主模块（v2.9.2）不含 cmd/* 工具——kratos CLI / protoc-gen-go-http 是
-# 独立模块 github.com/go-kratos/kratos/cmd/{kratos,protoc-gen-go-http}/v2，
-# 有自己的版本线（当前 @latest 解析为 v2.0.0-20260404020628-f149714c1d54），
-# 不能 pin 到主模块的 v2.9.2（会 invalid version）。
+# 注意：kratos CLI / protoc-gen-go-http 是独立模块（cmd/kratos/v2 等），
+# 有自己的版本线（无 tag、走 pseudo-version）——不能 pin 到主模块的 v2.9.2（会 invalid version），
+# 故用 @latest。
 init:
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
 	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.6.1
-	go install github.com/go-kratos/kratos/cmd/kratos/v2@v2.0.0-20260404020628-f149714c1d54
-	go install github.com/go-kratos/kratos/cmd/protoc-gen-go-http/v2@v2.0.0-20260404020628-f149714c1d54
+	go install github.com/go-kratos/kratos/cmd/kratos/v2@latest
+	go install github.com/go-kratos/kratos/cmd/protoc-gen-go-http/v2@latest
 	go install github.com/google/gnostic/cmd/protoc-gen-openapi@v0.7.1
 	go install github.com/google/wire/cmd/wire@v0.7.0
 	go install github.com/envoyproxy/protoc-gen-validate@v1.2.1
