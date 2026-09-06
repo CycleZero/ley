@@ -62,26 +62,30 @@ func TestTaskQueue_Priority(t *testing.T) {
 	// 注意：必须先提交全部任务再 Start——若 Start 后逐个提交，
 	// 空闲 worker 可能在更高优先级任务入队前抢先取走低优任务（时序竞态，CI 偶发）。
 	// 先入队后启动可保证三个任务都在堆中，worker 严格按优先级出队。
+	// 执行顺序经 channel 收集（读写天然 happens-before，避免 -race 误报）。
+	execOrder := make(chan int, 3)
 	queue.SubmitFunc("low_priority", func() error {
-		executionOrder = append(executionOrder, 1)
+		execOrder <- 1
 		return nil
 	}, WithPriority(10))
 
 	queue.SubmitFunc("high_priority", func() error {
-		executionOrder = append(executionOrder, 3)
+		execOrder <- 3
 		return nil
 	}, WithPriority(90))
 
 	queue.SubmitFunc("medium_priority", func() error {
-		executionOrder = append(executionOrder, 2)
+		execOrder <- 2
 		return nil
 	}, WithPriority(50))
 
 	queue.Start()
 	defer queue.Stop()
 
-	// 等待所有任务执行
-	time.Sleep(500 * time.Millisecond)
+	// 收集执行顺序（阻塞直至三个任务全部执行，无需 sleep）
+	for i := 0; i < 3; i++ {
+		executionOrder = append(executionOrder, <-execOrder)
+	}
 
 	// 验证执行顺序（高优先级先执行）
 	if len(executionOrder) != 3 {
