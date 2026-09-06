@@ -1,0 +1,15 @@
+# 统一行尾策略：文本文件按仓库自动归一为 LF
+* text=auto
+*.go   text eol=lf
+*.proto text eol=lf
+*.md   text eol=lf
+*.yaml text eol=lf
+*.yml  text eol=lf
+*.json text eol=lf
+*.sh   text eol=lf
+Makefile text eol=lf
+# 二进制不转换
+*.png  binary
+*.jpg  binary
+*.ico  binary
+*.zip  binary

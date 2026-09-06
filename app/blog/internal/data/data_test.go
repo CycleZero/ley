@@ -1,3 +1,5 @@
+//go:build integration
+
 package data
 
 import (
@@ -23,7 +25,11 @@ var (
 // testMain sets up a shared MySQL connection and cache for all tests.
 func testMain(m *testing.M) {
 	testOnce.Do(func() {
-		dsn := "root:poyuan666@tcp(172.18.240.1:3306)/ley?charset=utf8mb4&parseTime=True&loc=Local"
+		dsn := os.Getenv("LEY_TEST_MYSQL_DSN")
+		if dsn == "" {
+			panic("LEY_TEST_MYSQL_DSN 未设置：data 集成测试需指向测试 MySQL，" +
+				"例 root:pass@tcp(127.0.0.1:3306)/ley?charset=utf8mb4&parseTime=True&loc=Local")
+		}
 		db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{
 			DisableForeignKeyConstraintWhenMigrating: true,
 			Logger:                                   logger.Default.LogMode(logger.Silent),
