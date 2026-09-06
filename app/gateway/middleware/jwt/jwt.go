@@ -1,7 +1,10 @@
 package jwt
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"strconv"
@@ -205,6 +208,11 @@ func buildHandler(options *v1.JWT, holder *jwtHolder) middleware.Middleware {
 			if claims.Role != "" {
 				req.Header.Set(meta.AuthUserRoleKey, claims.Role)
 			}
+			// B-307: 透传真实客户端 IP（XFF 首跳，缺失时回退 RemoteAddr），
+			// 供下游阅读量去重等服务使用
+			if ip := clientIPFromRequest(req); ip != "" {
+				req.Header.Set(meta.AuthRealClientIpKey, ip)
+			}
 
 			reqMeta := &meta.RequestMetaData{
 				Auth: meta.Auth{
@@ -254,7 +262,24 @@ func extractToken(authHeader string) string {
 	return ""
 }
 
+// clientIPFromRequest 提取客户端真实 IP：优先 X-Forwarded-For 首跳，回退 RemoteAddr
+func clientIPFromRequest(req *http.Request) string {
+	if xff := req.Header.Get("X-Forwarded-For"); xff != "" {
+		if i := strings.IndexByte(xff, ','); i > 0 {
+			return strings.TrimSpace(xff[:i])
+		}
+		return strings.TrimSpace(xff)
+	}
+	if host, _, err := net.SplitHostPort(req.RemoteAddr); err == nil {
+		return host
+	}
+	return req.RemoteAddr
+}
+
+// newUnauthorizedResponse 构造统一信封格式的 401 响应：
+// {"code":401,"msg":"<reason>","data":null}（与 wrapresp 错误信封一致）
 func newUnauthorizedResponse(req *http.Request, reason string) *http.Response {
+	body := []byte(fmt.Sprintf(`{"code":401,"msg":%q,"data":null}`, reason))
 	return &http.Response{
 		StatusCode: http.StatusUnauthorized,
 		Status:     "401 Unauthorized",
@@ -265,8 +290,8 @@ func newUnauthorizedResponse(req *http.Request, reason string) *http.Response {
 			"Content-Type":           []string{"application/json"},
 			"X-Content-Type-Options": []string{"nosniff"},
 		},
-		Body:          http.NoBody,
-		ContentLength: -1,
+		Body:          io.NopCloser(bytes.NewReader(body)),
+		ContentLength: int64(len(body)),
 		Request:       req,
 	}
 }
