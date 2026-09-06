@@ -35,12 +35,12 @@ trace:
 # ================================
 data:
   database:
-    driver: postgres
+    driver: mysql
     host: 127.0.0.1
-    port: 5432
+    port: 3306
     database: ley
-    username: ley
-    password: ley123
+    username: root
+    password: change-me-in-production
   redis:
     host: 127.0.0.1
     port: 6379
