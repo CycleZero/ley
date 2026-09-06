@@ -98,6 +98,10 @@ func (r *tagRepo) FindOrCreate(ctx context.Context, name, slug string) (*biz.Tag
 	if err := r.data.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(po).Error; err != nil {
 		return nil, fmt.Errorf("find or create tag: %w", err)
 	}
+	// B-204: 真正插入新标签时失效 tag:all 缓存（冲突复用已有标签则无需失效）
+	if po.ID != 0 {
+		r.data.cache.Delete(ctx, cacheKeyTagAll)
+	}
 	// 重新查询取完整数据（如果 ON CONFLICT 跳过，po.ID 为 0）
 	return r.FindByName(ctx, name)
 }
@@ -124,6 +128,11 @@ func (r *tagRepo) Delete(ctx context.Context, id uint) error {
 	result := r.data.db.WithContext(ctx).Where("id = ?", id).Delete(&TagPO{})
 	if result.RowsAffected == 0 {
 		return biz.ErrTagNotFound
+	}
+	// B-208: 清理 articles_tags 孤儿关联（硬删；关联行无软删恢复需求，
+	// 且软删行会占据唯一约束阻碍未来重新关联）
+	if err := r.data.db.WithContext(ctx).Unscoped().Where("tag_id = ?", id).Delete(&ArticleTagPO{}).Error; err != nil {
+		r.data.log.WithContext(ctx).Warnf("[TagRepo.Delete] 清理文章标签关联失败 tag_id=%d err=%v", id, err)
 	}
 	r.data.cache.Delete(ctx, cacheKeyTagAll)
 	r.data.log.WithContext(ctx).Infof("[TagRepo.Delete] 成功 id=%d", id)
@@ -230,8 +239,11 @@ func (r *categoryRepo) ListTree(ctx context.Context) ([]*biz.Category, error) {
 }
 
 func (r *categoryRepo) IncrementArticleCount(ctx context.Context, id uint, delta int64) error {
-	return r.data.db.WithContext(ctx).Model(&CategoryPO{}).Where("id = ?", id).
+	err := r.data.db.WithContext(ctx).Model(&CategoryPO{}).Where("id = ?", id).
 		UpdateColumn("article_count", gorm.Expr("article_count + ?", delta)).Error
+	// B-204: 计数变化须失效 category:tree 缓存，否则前端计数滞后一个 TTL
+	r.data.cache.Delete(ctx, cacheKeyCatTree)
+	return err
 }
 
 // =============================================================================

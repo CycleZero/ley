@@ -337,3 +337,110 @@ func TestArticleRepo_EnrichesAuthorAndCategory(t *testing.T) {
 		}
 	}
 }
+
+// B-202: 标签 AND 过滤须在 MySQL 上工作（回归：原 PG schema 限定 Group 写法会语法错误）
+func TestArticleRepo_ListWithTagsFilter(t *testing.T) {
+	repo, d := setupArticleRepo(t)
+	ctx := context.Background()
+
+	sfx := time.Now().UnixNano()
+	tag1 := &TagPO{Name: fmt.Sprintf("tag-a-%d", sfx), Slug: fmt.Sprintf("tag-a-%d", sfx)}
+	tag2 := &TagPO{Name: fmt.Sprintf("tag-b-%d", sfx), Slug: fmt.Sprintf("tag-b-%d", sfx)}
+	if err := d.db.Create(tag1).Error; err != nil {
+		t.Fatalf("创建 tag1 失败: %v", err)
+	}
+	if err := d.db.Create(tag2).Error; err != nil {
+		t.Fatalf("创建 tag2 失败: %v", err)
+	}
+	t.Cleanup(func() { d.db.Where("id IN ?", []uint{tag1.ID, tag2.ID}).Delete(&TagPO{}) })
+
+	a := createTestArticle(t, repo, "双标签文章", uniSlug(t, "both-tags"), 1)
+	b := createTestArticle(t, repo, "单标签文章", uniSlug(t, "one-tag"), 1)
+
+	if err := repo.AssociateTags(ctx, a.ID, []uint{tag1.ID, tag2.ID}); err != nil {
+		t.Fatalf("关联双标签失败: %v", err)
+	}
+	if err := repo.AssociateTags(ctx, b.ID, []uint{tag1.ID}); err != nil {
+		t.Fatalf("关联单标签失败: %v", err)
+	}
+	// 发布两篇（List 默认只查 published）
+	for _, art := range []*biz.Article{a, b} {
+		if err := d.db.Model(&ArticlePO{}).Where("id = ?", art.ID).
+			Update("status", int8(biz.ArticleStatusPublished)).Error; err != nil {
+			t.Fatalf("发布文章失败: %v", err)
+		}
+	}
+
+	articles, total, err := repo.List(ctx, biz.ArticleListQuery{
+		Status: "published",
+		Tags:   []string{tag1.Name, tag2.Name},
+	})
+	if err != nil {
+		t.Fatalf("List 带双标签过滤失败: %v", err)
+	}
+	if total != 1 || len(articles) != 1 || articles[0].ID != a.ID {
+		t.Errorf("AND 过滤应只返回同时含两标签的文章: total=%d ids=%v", total, articleIDs(articles))
+	}
+
+	// 过滤单个标签应返回两篇
+	one, oneTotal, err := repo.List(ctx, biz.ArticleListQuery{Status: "published", Tags: []string{tag1.Name}})
+	if err != nil {
+		t.Fatalf("List 带单标签过滤失败: %v", err)
+	}
+	if oneTotal != 2 || len(one) != 2 {
+		t.Errorf("单标签应返回两篇: total=%d", oneTotal)
+	}
+}
+
+func articleIDs(arts []*biz.Article) []uint {
+	ids := make([]uint, 0, len(arts))
+	for _, x := range arts {
+		ids = append(ids, x.ID)
+	}
+	return ids
+}
+
+// B-204: 标签计数批量调整须失效 tag:all 缓存
+func TestArticleRepo_UpdateTagsCountInvalidatesTagAll(t *testing.T) {
+	repo, d := setupArticleRepo(t)
+	ctx := context.Background()
+
+	tag := &TagPO{Name: uniq(t, "cnt"), Slug: uniq(t, "cnt-slug")}
+	if err := d.db.Create(tag).Error; err != nil {
+		t.Fatalf("创建 tag 失败: %v", err)
+	}
+	t.Cleanup(func() { d.db.Where("id = ?", tag.ID).Delete(&TagPO{}) })
+
+	_ = d.cache.Set(ctx, cacheKeyTagAll, []byte(`[{"id":1}]`), 0)
+	if err := repo.UpdateTagsArticleCount(ctx, []uint{tag.ID}, 1); err != nil {
+		t.Fatalf("UpdateTagsArticleCount 失败: %v", err)
+	}
+	if _, err := d.cache.Get(ctx, cacheKeyTagAll); err == nil {
+		t.Error("标签计数变化后 tag:all 缓存应被失效")
+	}
+}
+
+// B-205: Update 变更 slug 后须清除旧 slug→id 映射缓存
+func TestArticleRepo_UpdateSlugClearsOldSlugCache(t *testing.T) {
+	repo, d := setupArticleRepo(t)
+	ctx := context.Background()
+
+	oldSlug := uniSlug(t, "old-slug")
+	a := createTestArticle(t, repo, "原标题", oldSlug, 1)
+	t.Cleanup(func() { d.db.Unscoped().Where("id = ?", a.ID).Delete(&ArticlePO{}) })
+
+	if err := d.cache.Set(ctx, fmt.Sprintf(keyArticleSlug, oldSlug), []byte("1"), 0); err != nil {
+		t.Fatalf("预置旧 slug 缓存失败: %v", err)
+	}
+
+	newSlug := uniSlug(t, "new-slug")
+	a.Slug = newSlug
+	a.Title = "新标题"
+	if err := repo.Update(ctx, a); err != nil {
+		t.Fatalf("Update 失败: %v", err)
+	}
+
+	if _, err := d.cache.Get(ctx, fmt.Sprintf(keyArticleSlug, oldSlug)); err == nil {
+		t.Error("旧 slug 映射缓存应被清除")
+	}
+}

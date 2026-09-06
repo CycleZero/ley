@@ -224,3 +224,69 @@ func TestCategoryRepo_IncrementArticleCount(t *testing.T) {
 		t.Errorf("expected 5, got %d", found.ArticleCount)
 	}
 }
+
+// B-204: FindOrCreate 插入新标签须失效 tag:all 缓存
+func TestTagRepo_FindOrCreateInvalidatesTagAll(t *testing.T) {
+	repo, d := setupTagRepo(t)
+	ctx := context.Background()
+
+	name := uniq(t, "foc")
+	repo.FindByName(ctx, "missing") // 触发一次不存在查询
+	_ = d.cache.Set(ctx, cacheKeyTagAll, []byte(`[{"id":1}]`), 0)
+	if _, err := d.cache.Get(ctx, cacheKeyTagAll); err != nil {
+		t.Fatalf("预置缓存失败: %v", err)
+	}
+
+	tag, err := repo.FindOrCreate(ctx, name, uniq(t, "foc-slug"))
+	if err != nil {
+		t.Fatalf("FindOrCreate 失败: %v", err)
+	}
+	if _, err := d.cache.Get(ctx, cacheKeyTagAll); err == nil {
+		t.Error("插入新标签后 tag:all 缓存应被失效")
+	}
+	t.Cleanup(func() { d.db.Where("id = ?", tag.ID).Delete(&TagPO{}) })
+}
+
+// B-204: 分类计数变化须失效 category:tree 缓存
+func TestCategoryRepo_IncrementInvalidatesTreeCache(t *testing.T) {
+	_, d := setupCategoryRepo(t)
+	ctx := context.Background()
+
+	_ = d.cache.Set(ctx, cacheKeyCatTree, []byte(`[{"id":1}]`), 0)
+	if _, err := d.cache.Get(ctx, cacheKeyCatTree); err != nil {
+		t.Fatalf("预置缓存失败: %v", err)
+	}
+
+	repo, _ := setupCategoryRepo(t)
+	if err := repo.IncrementArticleCount(ctx, 1, 1); err != nil {
+		t.Fatalf("IncrementArticleCount 失败: %v", err)
+	}
+	if _, err := d.cache.Get(ctx, cacheKeyCatTree); err == nil {
+		t.Error("计数变化后 category:tree 缓存应被失效")
+	}
+}
+
+// B-208: 删除标签须清理 articles_tags 孤儿关联
+func TestTagRepo_DeleteClearsArticleTags(t *testing.T) {
+	repo, d := setupTagRepo(t)
+	ctx := context.Background()
+
+	tag := &TagPO{Name: uniq(t, "orphan"), Slug: uniq(t, "orphan-slug")}
+	if err := d.db.Create(tag).Error; err != nil {
+		t.Fatalf("创建 tag 失败: %v", err)
+	}
+	at := &ArticleTagPO{ArticleID: 1, TagID: tag.ID}
+	if err := d.db.Create(at).Error; err != nil {
+		t.Fatalf("创建关联失败: %v", err)
+	}
+	t.Cleanup(func() { d.db.Unscoped().Where("id = ?", at.ID).Delete(&ArticleTagPO{}) })
+
+	if err := repo.Delete(ctx, tag.ID); err != nil {
+		t.Fatalf("Delete 失败: %v", err)
+	}
+	var cnt int64
+	d.db.Unscoped().Model(&ArticleTagPO{}).Where("tag_id = ?", tag.ID).Count(&cnt)
+	if cnt != 0 {
+		t.Errorf("删除标签后 articles_tags 应无残留: cnt=%d", cnt)
+	}
+}

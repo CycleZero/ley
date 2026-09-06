@@ -63,8 +63,7 @@ func (ArticleLikePO) TableName() string { return "articles_likes" }
 // =============================================================================
 
 const (
-	keyArticle      = "article:detail:%d" // 文章详情缓存: article:detail:{id}
-	keyArticleSlug  = "article:slug:%s"   // slug→id 映射缓存: article:slug:{slug}
+	keyArticleSlug  = "article:slug:%s" // slug→id 映射缓存: article:slug:{slug}
 	ttlArticle      = 10 * time.Minute
 	ttlArticleStale = 2 * time.Minute
 )
@@ -115,6 +114,10 @@ func (r *articleRepo) Update(ctx context.Context, a *biz.Article) error {
 	span.SetAttributes(attribute.Int("article.id", int(a.ID)))
 	r.data.log.WithContext(ctx).Debugf("[ArticleRepo.Update] id=%d title=%q status=%d", a.ID, a.Title, a.Status)
 
+	// B-205: 记录变更前的 slug（UPDATE 后无法再取旧值），slug 变更时用于清除旧映射缓存
+	var oldSlug string
+	_ = r.data.db.WithContext(ctx).Model(&ArticlePO{}).Select("slug").Where("id = ?", a.ID).Scan(&oldSlug).Error
+
 	result := r.data.db.WithContext(ctx).Model(&ArticlePO{}).Where("id = ?", a.ID).Updates(map[string]interface{}{
 		"title":        a.Title,
 		"slug":         a.Slug,
@@ -133,7 +136,11 @@ func (r *articleRepo) Update(ctx context.Context, a *biz.Article) error {
 	if result.RowsAffected == 0 {
 		return biz.ErrArticleNotFound
 	}
-	r.invalidateCache(ctx, a.ID, a.Slug)
+	// B-205: slug 变更时旧 slug→id 映射仍指向本文（缓存 10min），需主动清除
+	if oldSlug != "" && oldSlug != a.Slug {
+		r.data.cache.Delete(ctx, fmt.Sprintf(keyArticleSlug, oldSlug))
+	}
+	r.invalidateCache(ctx, a.Slug)
 	r.data.log.WithContext(ctx).Infof("[ArticleRepo.Update] 成功 id=%d", a.ID)
 	return nil
 }
@@ -161,7 +168,7 @@ func (r *articleRepo) Delete(ctx context.Context, id uint) error {
 		r.data.log.WithContext(ctx).Errorf("[ArticleRepo.Delete] 失败 id=%d err=%v", id, err)
 		return fmt.Errorf("delete article: %w", err)
 	}
-	r.invalidateCache(ctx, id, po.Slug)
+	r.invalidateCache(ctx, po.Slug)
 	r.data.log.WithContext(ctx).Infof("[ArticleRepo.Delete] 成功 id=%d", id)
 	return nil
 }
@@ -268,13 +275,14 @@ func (r *articleRepo) List(ctx context.Context, query biz.ArticleListQuery) ([]*
 		db = db.Where("author_id = ?", *query.AuthorID)
 	}
 
-	// 标签 AND 过滤（HAVING COUNT 确保同时拥有所有标签）
+	// 标签 AND 过滤：文章须同时拥有全部给定标签。
+	// 用相关子查询计数，兼容 MySQL 与 PostgreSQL（原 Group+Having 写法含 PG
+	// schema 限定符，在 MySQL 上语法错误，且与 GORM Count 语义冲突）。
 	if len(query.Tags) > 0 {
-		db = db.Joins("JOIN articles_tags at2 ON at2.article_id = articles.id").
-			Joins("JOIN tags t ON t.id = at2.tag_id").
-			Where("t.name IN ?", query.Tags).
-			Group("\"article\".articles.id").
-			Having("COUNT(DISTINCT t.id) = ?", len(query.Tags))
+		tagSub := "(SELECT COUNT(DISTINCT t.id) FROM articles_tags at2 " +
+			"JOIN tags t ON t.id = at2.tag_id " +
+			"WHERE at2.article_id = articles.id AND t.name IN ?)"
+		db = db.Where(tagSub+" = ?", query.Tags, len(query.Tags))
 	}
 
 	// 统计总数
@@ -366,8 +374,11 @@ func (r *articleRepo) IncrementViewCount(ctx context.Context, id uint, delta int
 }
 
 func (r *articleRepo) UpdateTagsArticleCount(ctx context.Context, tagIDs []uint, delta int64) error {
-	return r.data.db.WithContext(ctx).Model(&TagPO{}).Where("id IN ?", tagIDs).
+	err := r.data.db.WithContext(ctx).Model(&TagPO{}).Where("id IN ?", tagIDs).
 		UpdateColumn("article_count", gorm.Expr("article_count + ?", delta)).Error
+	// B-204: 计数变化须失效 tag:all 缓存（tag 列表携带 article_count）
+	r.data.cache.Delete(ctx, cacheKeyTagAll)
+	return err
 }
 
 // =============================================================================
@@ -451,8 +462,9 @@ func (r *articleRepo) DeleteLike(ctx context.Context, articleID, userID uint) er
 			return result.Error
 		}
 		if result.RowsAffected > 0 {
+			// B-207: 计数下限保护（防取消点赞把计数打到负数）
 			return tx.Model(&ArticlePO{}).Where("id = ?", articleID).
-				UpdateColumn("like_count", gorm.Expr("like_count - 1")).Error
+				UpdateColumn("like_count", gorm.Expr("GREATEST(like_count - 1, 0)")).Error
 		}
 		return nil
 	})
@@ -470,14 +482,11 @@ func (r *articleRepo) IsLiked(ctx context.Context, articleID, userID uint) (bool
 // 缓存辅助
 // =============================================================================
 
-func (r *articleRepo) invalidateCache(ctx context.Context, id uint, slug string) {
-	keys := []string{fmt.Sprintf(keyArticle, id)}
-	if slug != "" {
-		keys = append(keys, fmt.Sprintf(keyArticleSlug, slug))
+func (r *articleRepo) invalidateCache(ctx context.Context, slug string) {
+	if slug == "" {
+		return
 	}
-	for _, k := range keys {
-		_ = r.data.cache.Delete(ctx, k)
-	}
+	_ = r.data.cache.Delete(ctx, fmt.Sprintf(keyArticleSlug, slug))
 }
 
 // =============================================================================

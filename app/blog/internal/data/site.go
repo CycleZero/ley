@@ -146,3 +146,15 @@ func (r *siteRepo) SetActiveBackground(ctx context.Context, id uint) error {
 	}
 	return err
 }
+
+// IsLikesEnabled 实现 biz.LikesGate：站点配置 enable_likes 未设置时默认启用
+func (r *siteRepo) IsLikesEnabled(ctx context.Context) (bool, error) {
+	cfg, err := r.GetConfig(ctx)
+	if err != nil {
+		return false, err
+	}
+	if cfg.EnableLikes == nil {
+		return true, nil
+	}
+	return *cfg.EnableLikes, nil
+}

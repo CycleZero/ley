@@ -202,6 +202,7 @@ func ProvideRegistrar(etcdClient *clientv3.Client) registry.Registrar {
 // =============================================================================
 
 var ProviderSet = wire.NewSet(
+	wire.Bind(new(biz.LikesGate), new(biz.SiteRepo)),
 	NewData,
 	NewArticleRepo,
 	NewTagRepo,
