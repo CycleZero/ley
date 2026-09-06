@@ -33,11 +33,11 @@ ley/
 ├── pkg/                    # 共享 Go 库（17 个子包）
 │   ├── meta/               # 用户上下文跨服务传递（x-md-global- 前缀）
 │   ├── jwt/                # JWT 生成与校验（etcd 动态密钥）
-│   ├── infra/              # 基础设施初始化（DB/Redis/MinIO/NATS）
-│   ├── eventbus/           # NATS JetStream 事件总线
+│   ├── infra/              # 基础设施初始化（DB/Redis/MinIO，NATS 段为遗留死代码）
+│   ├── eventbus/           # 事件总线（生产接线为内存通道，NATS 实现就绪未启用）
 │   ├── cache/              # Redis 缓存（接口 + 实现）
 │   ├── oss/                # 对象存储（MinIO / 腾讯云 COS）
-│   ├── mq/                 # NATS 消息队列连接
+│   ├── mq/                 # 消息队列抽象（NATS JetStream + 内存实现；两服务当前用内存连接）
 │   ├── security/           # 密码哈希（bcrypt）
 │   ├── trace/              # OpenTelemetry 链路追踪
 │   ├── task/               # 异步任务队列
@@ -70,7 +70,7 @@ ley/
 | 文件上传 | `app/blog/internal/biz/file.go` | MinIO 直传、MIME 校验 |
 | 网关路由/中间件 | `app/gateway/proxy/`、`app/gateway/middleware/` | JWT/CORS/限流/熔断/链路追踪 |
 | 前端 API 客户端 | `ley-web/src/lib/api-client.ts` | ofetch：Token 注入、401 单飞刷新、`{code,msg,data}` 解包 |
-| 前端数据获取 | `ley-web/src/hooks/use-*.ts` | TanStack Query（tags/categories 缓存 60min） |
+| 前端数据获取 | `ley-web/src/hooks/use-*.ts` | TanStack Query（tags/categories staleTime 60s） |
 | 前端页面 | `ley-web/src/pages/` | 文件路由，含 `/admin` 后台 |
 | 前端状态管理 | `ley-web/src/stores/` | Zustand（auth、ui、draft） |
 | 前端路由/守卫 | `ley-web/src/routes.tsx` | React Router v7，RequireAuth/RequireAdmin |
@@ -189,7 +189,7 @@ make wire                # Wire 依赖注入代码生成
 make wire-all            # 含 gateway
 
 # === 测试 ===
-make test-unit           # 单元测试，-short，含覆盖率
+make test-unit           # 单元测试（data 层集成测试已用 //go:build integration 隔离，连库需 LEY_TEST_MYSQL_DSN + make test-integration）
 make test-integration    # 集成测试，需 Docker 基础设施
 make test-coverage       # 浏览器打开覆盖率报告
 
@@ -211,8 +211,8 @@ cd ley-web && pnpm lint      # oxlint
 - **评论系统已删除**：后端评论模块已移除（commit 8da75c36），前端不规划评论功能；`docs/design.md` 中评论设计已过时
 - **AGENTS.md 已更新**：旧 Nuxt 4 描述作废，`docs/frontend-design.md` 仅作需求参考
 - **基础镜像依赖**：Docker 构建前必须运行 `./build-deploy-image.sh` 构建 `ley-builder:v1` 和 `ley-runtime:v1`，或从 GHCR 拉取
-- **docker-compose 无基础设施**：不含 PostgreSQL/Redis/etcd/NATS/MinIO 容器，需单独部署
+- **docker-compose 无基础设施**：不含 MySQL/Redis/etcd/MinIO 容器，需单独部署；数据库为 MySQL（configs/ 模板已对齐）
 - **Host 网络模式**：docker-compose 使用 `network_mode: host`，无端口映射，不能多实例
-- **Gateway proto 独立**：gateway 的 proto 生成在 `app/gateway/Makefile`，根 `make api` 不处理
+- **Gateway proto**：api/gateway 由根 `make api` 统一生成（`app/gateway/Makefile` 已失效：`find api` 指向不存在的目录）
 - **中国镜像**：Go 代理 `goproxy.cn`，Debian 源 `mirrors.ustc.edu.cn`，非中国网络需调整
 - **空目录 pkg/dtm/**：遗留空目录，建议清理
