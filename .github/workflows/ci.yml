@@ -142,6 +142,8 @@ jobs:
           tags: ley-builder:v1
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            GOPROXY=https://proxy.golang.org,direct
 
       - name: Build runtime image (ley-runtime:v1)
         uses: docker/build-push-action@v5
@@ -161,6 +163,8 @@ jobs:
           push: false
           tags: ley-auth:ci
           cache-from: type=gha
+          build-args: |
+            GOPROXY=https://proxy.golang.org,direct
 
       - name: Build blog image
         uses: docker/build-push-action@v5
@@ -170,6 +174,8 @@ jobs:
           push: false
           tags: ley-blog:ci
           cache-from: type=gha
+          build-args: |
+            GOPROXY=https://proxy.golang.org,direct
 
       - name: Build gateway image
         uses: docker/build-push-action@v5
@@ -179,6 +185,8 @@ jobs:
           push: false
           tags: ley-gateway:ci
           cache-from: type=gha
+          build-args: |
+            GOPROXY=https://proxy.golang.org,direct
 
       - name: Build entry image
         uses: docker/build-push-action@v5
@@ -188,3 +196,5 @@ jobs:
           push: false
           tags: ley-entry:ci
           cache-from: type=gha
+          build-args: |
+            GOPROXY=https://proxy.golang.org,direct
