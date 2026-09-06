@@ -144,11 +144,17 @@ type ArticleUseCase struct {
 	eb      eventbus.EventBus // 事件总线
 	cache   cache.Cache       // Redis 缓存（浏览量缓冲 + 防刷去重）
 	log     *log.Helper       // 结构化日志
+	gate    LikesGate         // 全站点赞开关（可为 nil，视为启用）
+}
+
+// LikesGate 提供全站点赞开关（由 site 配置实现）
+type LikesGate interface {
+	IsLikesEnabled(ctx context.Context) (bool, error)
 }
 
 // NewArticleUseCase 构造函数（由 Wire 调用注入依赖）
-func NewArticleUseCase(repo ArticleRepo, tagRepo TagRepo, catRepo CategoryRepo, eb eventbus.EventBus, c cache.Cache, logger log.Logger) *ArticleUseCase {
-	return &ArticleUseCase{repo: repo, tagRepo: tagRepo, catRepo: catRepo, eb: eb, cache: c, log: log.NewHelper(logger)}
+func NewArticleUseCase(repo ArticleRepo, tagRepo TagRepo, catRepo CategoryRepo, eb eventbus.EventBus, c cache.Cache, gate LikesGate, logger log.Logger) *ArticleUseCase {
+	return &ArticleUseCase{repo: repo, tagRepo: tagRepo, catRepo: catRepo, eb: eb, cache: c, gate: gate, log: log.NewHelper(logger)}
 }
 
 // =============================================================================
@@ -172,6 +178,7 @@ var (
 	ErrSlugAlreadyExists       = kerrors.Conflict("SLUG_ALREADY_EXISTS", "Slug 已被占用")
 	ErrUserNotAuthenticated    = kerrors.Unauthorized("NOT_AUTHENTICATED", "用户未认证")
 	ErrPermissionDenied        = kerrors.Forbidden("PERMISSION_DENIED", "权限不足，需要管理员")
+	ErrLikesDisabled           = kerrors.Forbidden("LIKES_DISABLED", "点赞功能已关闭")
 )
 
 // =============================================================================
@@ -413,6 +420,14 @@ func (uc *ArticleUseCase) UpdateArticle(ctx context.Context, id uint, title, con
 	// 步骤4: 摘要、封面图、分类更新
 	// 这些字段无需额外校验，直接赋值
 	// ===================================================================
+
+	// B-209: 分类计数调整项（UPDATE 成功后统一执行）
+	type catCountAdj struct {
+		catID uint
+		delta int64
+	}
+	var pendingCatCount []catCountAdj
+
 	if excerpt != nil {
 		uc.log.WithContext(ctx).Debugf("[UpdateArticle] 步骤4a: 摘要变更 old_len=%d new_len=%d", len(article.Excerpt), len(*excerpt))
 		article.Excerpt = *excerpt
@@ -428,18 +443,17 @@ func (uc *ArticleUseCase) UpdateArticle(ctx context.Context, id uint, title, con
 		uc.log.WithContext(ctx).Debugf("[UpdateArticle] 步骤4c: 分类变更 old=%v new=%v clearing=%v",
 			article.CategoryID, *categoryID, isClearing)
 
-		// 已发布文章变更分类（包括移除），需调整新旧计数
+		// B-209: 已发布文章变更分类（含移除）的计数调整延迟到 UPDATE 成功后执行
+		//（避免 UPDATE 失败时计数已错乱）；此处仅记录待调整项
 		if article.Status == ArticleStatusPublished && article.CategoryID != nil {
-			uc.log.WithContext(ctx).Debugf("[UpdateArticle] 步骤4c-计数: 旧分类-1 category_id=%d",
+			uc.log.WithContext(ctx).Debugf("[UpdateArticle] 步骤4c-计数: 待调整 旧分类-1 category_id=%d",
 				*article.CategoryID)
-			_ = uc.catRepo.IncrementArticleCount(ctx, *article.CategoryID, -1)
+			pendingCatCount = append(pendingCatCount, catCountAdj{catID: *article.CategoryID, delta: -1})
 		}
-
-		// 只有设置到有效分类时才给新分类 +1（移除分类时不 +1）
 		if !isClearing && article.Status == ArticleStatusPublished {
-			uc.log.WithContext(ctx).Debugf("[UpdateArticle] 步骤4c-计数: 新分类+1 category_id=%d",
+			uc.log.WithContext(ctx).Debugf("[UpdateArticle] 步骤4c-计数: 待调整 新分类+1 category_id=%d",
 				*categoryID)
-			_ = uc.catRepo.IncrementArticleCount(ctx, *categoryID, 1)
+			pendingCatCount = append(pendingCatCount, catCountAdj{catID: *categoryID, delta: 1})
 		}
 
 		// 更新 article 的 CategoryID
@@ -461,6 +475,14 @@ func (uc *ArticleUseCase) UpdateArticle(ctx context.Context, id uint, title, con
 		return nil, fmt.Errorf("update article: %w", err)
 	}
 	uc.log.WithContext(ctx).Debugf("[UpdateArticle] 步骤5完成: repo.Update 成功")
+
+	// B-209: UPDATE 成功后执行分类计数调整；失败不静默（内容已提交，显式告警可观测）
+	for _, adj := range pendingCatCount {
+		if err := uc.catRepo.IncrementArticleCount(ctx, adj.catID, adj.delta); err != nil {
+			uc.log.WithContext(ctx).Errorf("[UpdateArticle] 分类计数调整失败 category_id=%d delta=%d err=%v",
+				adj.catID, adj.delta, err)
+		}
+	}
 
 	// ===================================================================
 	// 步骤6: 标签全量替换
@@ -869,6 +891,28 @@ func (uc *ArticleUseCase) SearchArticles(ctx context.Context, keyword string, pa
 func (uc *ArticleUseCase) LikeArticle(ctx context.Context, articleID uint) error {
 	uc.log.WithContext(ctx).Debugf("[LikeArticle] 开始 article_id=%d", articleID)
 
+	// B-207: 全站点赞开关（gate 未注入时视为启用）
+	if uc.gate != nil {
+		enabled, gErr := uc.gate.IsLikesEnabled(ctx)
+		if gErr != nil {
+			return fmt.Errorf("check likes gate: %w", gErr)
+		}
+		if !enabled {
+			uc.log.WithContext(ctx).Warnf("[LikeArticle] 点赞功能已关闭 article_id=%d", articleID)
+			return ErrLikesDisabled
+		}
+	}
+
+	// B-207: 仅已发布文章可被点赞（不存在/草稿/归档 → 404 语义）
+	article, err := uc.repo.FindByID(ctx, articleID)
+	if err != nil {
+		return err
+	}
+	if article.Status != ArticleStatusPublished {
+		uc.log.WithContext(ctx).Warnf("[LikeArticle] 非发布状态不可点赞 article_id=%d status=%d", articleID, article.Status)
+		return ErrArticleNotFound
+	}
+
 	// 步骤1: 提取用户ID
 	userID, err := getCurrentUserID(ctx)
 	if err != nil {
@@ -909,6 +953,11 @@ func (uc *ArticleUseCase) LikeArticle(ctx context.Context, articleID uint) error
 
 func (uc *ArticleUseCase) UnlikeArticle(ctx context.Context, articleID uint) error {
 	uc.log.WithContext(ctx).Debugf("[UnlikeArticle] 开始 article_id=%d", articleID)
+
+	// B-207: 取消点赞同样要求文章存在（幂等删除由 data 层保证）
+	if _, err := uc.repo.FindByID(ctx, articleID); err != nil {
+		return err
+	}
 
 	// 步骤1: 提取用户ID
 	userID, err := getCurrentUserID(ctx)

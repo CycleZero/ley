@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"time"
 
 	blogv1 "github.com/CycleZero/ley/api/blog/v1"
 	"github.com/CycleZero/ley/app/blog/internal/biz"
@@ -83,6 +84,6 @@ func toFileInfo(f *biz.File) *blogv1.FileInfo {
 	}
 	return &blogv1.FileInfo{
 		Id: uint64(f.ID), Filename: f.Filename, MimeType: f.MimeType, Size: f.Size, Url: f.URL,
-		CreatedAt: f.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		CreatedAt: f.CreatedAt.UTC().Format(time.RFC3339),
 	}
 }

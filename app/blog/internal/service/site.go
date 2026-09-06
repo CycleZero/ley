@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"time"
 
 	blogv1 "github.com/CycleZero/ley/api/blog/v1"
 	"github.com/CycleZero/ley/app/blog/internal/biz"
@@ -111,7 +112,7 @@ func toSiteBackground(b *biz.SiteBackground) *blogv1.SiteBackground {
 	}
 	return &blogv1.SiteBackground{
 		Id: uint64(b.ID), Filename: b.Filename, Url: b.URL, IsActive: b.IsActive,
-		SortOrder: int32(b.SortOrder), CreatedAt: b.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		SortOrder: int32(b.SortOrder), CreatedAt: b.CreatedAt.UTC().Format(time.RFC3339),
 	}
 }
 

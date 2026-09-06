@@ -137,6 +137,7 @@ type mockSiteRepo struct {
 	cfg *biz.SiteSetting
 }
 
+func (m *mockSiteRepo) IsLikesEnabled(ctx context.Context) (bool, error) { return true, nil }
 func (m *mockSiteRepo) GetConfig(ctx context.Context) (*biz.SiteSetting, error) {
 	if m.cfg == nil {
 		return nil, errors.New("not found")

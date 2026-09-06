@@ -67,6 +67,8 @@ type MusicPlaylist struct {
 type SiteRepo interface {
 	GetConfig(ctx context.Context) (*SiteSetting, error)
 	SaveConfig(ctx context.Context, config *SiteSetting) error
+	// IsLikesEnabled 全站点赞开关（供 ArticleUseCase 读取 enable_likes）
+	IsLikesEnabled(ctx context.Context) (bool, error)
 
 	CreateBackground(ctx context.Context, bg *SiteBackground, file io.Reader) error
 	DeleteBackground(ctx context.Context, id uint) error

@@ -204,6 +204,7 @@ func newTestArticleService(t *testing.T) *ArticleService {
 		&mockCategoryRepo{},
 		&mockEB{},
 		asCache(),
+		nil,
 		log.DefaultLogger,
 	)
 	return NewArticleService(uc, log.DefaultLogger)

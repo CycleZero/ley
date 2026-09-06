@@ -264,6 +264,7 @@ type mockSiteRepo struct {
 func newMockSiteRepo() *mockSiteRepo {
 	return &mockSiteRepo{config: &SiteSetting{}, bgNextID: 1}
 }
+func (m *mockSiteRepo) IsLikesEnabled(ctx context.Context) (bool, error) { return true, nil }
 func (m *mockSiteRepo) GetConfig(ctx context.Context) (*SiteSetting, error) {
 	if m.GetConfigFn != nil { return m.GetConfigFn(ctx) }
 	if m.config == nil { return &SiteSetting{}, nil }
@@ -374,14 +375,23 @@ func ctxWithRole(userID uint64, role string) context.Context {
 func testLogger() log.Logger { return log.DefaultLogger }
 
 func setupArticleUseCase() (*ArticleUseCase, *mockArticleRepo, *mockTagRepo, *mockCategoryRepo, *mockEventBus) {
+	return setupArticleUseCaseWithGate(nil)
+}
+
+func setupArticleUseCaseWithGate(gate LikesGate) (*ArticleUseCase, *mockArticleRepo, *mockTagRepo, *mockCategoryRepo, *mockEventBus) {
 	ar := newMockArticleRepo()
 	tr := newMockTagRepo()
 	cr := newMockCategoryRepo()
 	eb := newMockEventBus()
 	c := newMockCache()
-	uc := NewArticleUseCase(ar, tr, cr, eb, c, testLogger())
+	uc := NewArticleUseCase(ar, tr, cr, eb, c, gate, testLogger())
 	return uc, ar, tr, cr, eb
 }
+
+// stubGate 可控的 LikesGate 测试替身
+type stubGate struct{ enabled bool }
+
+func (g *stubGate) IsLikesEnabled(ctx context.Context) (bool, error) { return g.enabled, nil }
 
 func setupTagUseCase() (*TagUseCase, *mockTagRepo) {
 	tr := newMockTagRepo()

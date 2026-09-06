@@ -2,11 +2,13 @@ package service
 
 import (
 	"context"
+	"time"
 
 	blogv1 "github.com/CycleZero/ley/api/blog/v1"
 	commonv1 "github.com/CycleZero/ley/api/common/v1"
 	"github.com/CycleZero/ley/app/blog/internal/biz"
 	"github.com/CycleZero/ley/pkg/meta"
+	"github.com/CycleZero/ley/pkg/security"
 
 	"github.com/go-kratos/kratos/v2/log"
 )
@@ -110,8 +112,12 @@ func (s *ArticleService) UnlikeArticle(ctx context.Context, req *blogv1.UnlikeAr
 }
 
 func (s *ArticleService) ViewArticle(ctx context.Context, req *blogv1.ViewArticleRequest) (*blogv1.ViewArticleReply, error) {
-	// 从 Gateway 透传的 metadata 中提取客户端真实 IP
+	// B-206: 优先取网关透传的 x-md-global-auth-real-ip；缺失时回退 transport 层
+	// X-Forwarded-For 等头（网关已追加 XFF），避免去重键坍缩为全站共享。
 	clientIP := meta.GetRequestMetaData(ctx).RealClientIp
+	if clientIP == "" {
+		clientIP = security.GetRealIp(ctx)
+	}
 	counted, err := s.uc.ViewArticle(ctx, uint(req.Id), clientIP)
 	if err != nil {
 		return nil, err
@@ -128,13 +134,13 @@ func toArticleInfo(a *biz.Article) *blogv1.ArticleInfo {
 		Status: articleStatusStr(a.Status), AuthorId: uint64(a.AuthorID),
 		Author: &commonv1.AuthorInfo{Id: uint64(a.AuthorID), Username: a.AuthorName, Avatar: a.AuthorAvatar},
 		CategoryId: derefUint(a.CategoryID), ViewCount: a.ViewCount, LikeCount: a.LikeCount,
-		IsTop: a.IsTop, IsLiked: a.IsLiked, CreatedAt: a.CreatedAt.Format("2006-01-02T15:04:05Z"), UpdatedAt: a.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+		IsTop: a.IsTop, IsLiked: a.IsLiked, CreatedAt: a.CreatedAt.UTC().Format(time.RFC3339), UpdatedAt: a.UpdatedAt.UTC().Format(time.RFC3339),
 	}
 	if a.CategoryID != nil {
 		info.Category = &blogv1.CategoryInfo{Id: uint64(*a.CategoryID), Name: a.CategoryName}
 	}
 	if a.PublishedAt != nil {
-		info.PublishedAt = a.PublishedAt.Format("2006-01-02T15:04:05Z")
+		info.PublishedAt = a.PublishedAt.UTC().Format(time.RFC3339)
 	}
 	if len(a.Tags) > 0 {
 		info.Tags = make([]*blogv1.TagInfo, 0, len(a.Tags))

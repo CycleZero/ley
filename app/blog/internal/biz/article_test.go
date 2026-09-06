@@ -288,6 +288,9 @@ func TestArticleUseCase_LikeArticle(t *testing.T) {
 	ctx := ctxWithUser(1)
 
 	created, _ := uc.CreateArticle(ctx, "LikeMe", "content", "", "", nil, nil)
+	if _, err := uc.PublishArticle(ctx, created.ID); err != nil {
+		t.Fatalf("PublishArticle 失败: %v", err)
+	}
 
 	t.Run("like", func(t *testing.T) {
 		err := uc.LikeArticle(ctx, created.ID)
@@ -409,4 +412,46 @@ func TestArticleUseCase_ListArticlesVisibility(t *testing.T) {
 			t.Errorf("匿名列已发布应放行: %v", err)
 		}
 	})
+}
+
+// B-207: 点赞语义——非发布文章/不存在文章不可点赞；开关关闭时拒绝
+func TestArticleUseCase_LikeRequiresPublishedAndGate(t *testing.T) {
+	uc, _, _, _, _ := setupArticleUseCase()
+	ctxAuthor := ctxWithUser(1)
+
+	draft, err := uc.CreateArticle(ctxAuthor, "LikeDraft", "c", "", "", nil, nil)
+	if err != nil {
+		t.Fatalf("CreateArticle 失败: %v", err)
+	}
+
+	t.Run("draft not likeable", func(t *testing.T) {
+		if err := uc.LikeArticle(ctxAuthor, draft.ID); err != ErrArticleNotFound {
+			t.Errorf("草稿不可点赞: got %v", err)
+		}
+	})
+	t.Run("nonexistent not likeable", func(t *testing.T) {
+		if err := uc.LikeArticle(ctxAuthor, 99999); err != ErrArticleNotFound {
+			t.Errorf("不存在文章不可点赞: got %v", err)
+		}
+		if err := uc.UnlikeArticle(ctxAuthor, 99999); err != ErrArticleNotFound {
+			t.Errorf("不存在文章不可取消赞: got %v", err)
+		}
+	})
+}
+
+// B-207: 全站点赞开关关闭时拒绝点赞
+func TestArticleUseCase_LikesDisabledByGate(t *testing.T) {
+	uc, _, _, _, _ := setupArticleUseCaseWithGate(&stubGate{enabled: false})
+	ctx := ctxWithUser(1)
+
+	created, err := uc.CreateArticle(ctx, "Gated", "c", "", "", nil, nil)
+	if err != nil {
+		t.Fatalf("CreateArticle 失败: %v", err)
+	}
+	if _, err := uc.PublishArticle(ctx, created.ID); err != nil {
+		t.Fatalf("PublishArticle 失败: %v", err)
+	}
+	if err := uc.LikeArticle(ctx, created.ID); err != ErrLikesDisabled {
+		t.Errorf("开关关闭应拒绝点赞: got %v", err)
+	}
 }
