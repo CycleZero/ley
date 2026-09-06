@@ -1,0 +1,31 @@
+# ================================
+# Ley — 引导配置（所有服务共用）
+# ================================
+# 对应 conf/common.proto Bootstrap
+# 每个服务启动时从本地文件读取此文件作为基础配置，
+# 服务专用配置（DB/Redis/JWT 等）再从 etcd 或服务本地目录读取。
+#
+# 本地开发：复制到 ./data/{service}/configs/config.yaml
+# Docker 启动：挂载 ./data:/app/data，容器内路径 /app/data/{service}/configs/config.yaml
+
+server:
+  http:
+    network: tcp
+    addr: 0.0.0.0:8000
+    timeout: 3s
+  grpc:
+    network: tcp
+    addr: 0.0.0.0:9000
+    timeout: 3s
+
+log:
+  level: Debug
+  path: ./data/logs
+  mode: Dev
+
+etcd:
+  endpoints:
+    - 127.0.0.1:2379
+
+trace:
+  endpoint: http://127.0.0.1:4318

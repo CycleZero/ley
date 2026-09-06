@@ -40,7 +40,7 @@ bin/
 # Personal workspace
 .omo/
 
-config.yaml
+# 运行时本地配置（data/ 不入库）
 /data/*/configs/*.yaml
 /data/*/logs
 
