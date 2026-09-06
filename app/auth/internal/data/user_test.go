@@ -250,3 +250,39 @@ func TestUserRepo_CacheRoundTrip(t *testing.T) {
 		t.Fatalf("二次查询失败: %v", err)
 	}
 }
+
+// B-203: MySQL 基线——username/email 为普通唯一索引，软删后不可静默复用
+func TestUserRepo_SoftDeletedUsernameNotReusable(t *testing.T) {
+	repo, d := newTestRepo(t)
+	ctx := context.Background()
+
+	// 依赖服务启动 AutoMigrate 建立的普通唯一索引（idx_users_username）；缺失时跳过
+	var idxCnt int64
+	if err := d.db.Raw(`SELECT COUNT(*) FROM information_schema.statistics
+		WHERE table_schema = DATABASE() AND table_name = 'users'
+		AND index_name = 'idx_users_username' AND non_unique = 0`).Scan(&idxCnt).Error; err != nil {
+		t.Fatalf("查询索引失败: %v", err)
+	}
+	if idxCnt == 0 {
+		t.Skip("users 表缺少 idx_users_username 唯一索引（AutoMigrate 未执行）")
+	}
+
+	username := uniq("reuse")
+	u := makeUser(username, uniq("reuse")+"@example.com")
+	if err := repo.Create(ctx, u); err != nil {
+		t.Fatalf("首次 Create 失败: %v", err)
+	}
+	if err := repo.Delete(ctx, u.ID); err != nil {
+		t.Fatalf("软删失败: %v", err)
+	}
+	t.Cleanup(func() { d.db.Unscoped().Where("id = ?", u.ID).Delete(&UserPO{}) })
+
+	u2 := makeUser(username, uniq("reuse")+"@example.com")
+	err := repo.Create(ctx, u2)
+	if err == nil {
+		t.Fatal("软删后重建同名用户名应冲突（MySQL 普通唯一索引）")
+	}
+	if !kerrors.IsConflict(err) || kerrors.FromError(err).Reason != "USER_DUPLICATE" {
+		t.Errorf("应返回 409 USER_DUPLICATE: %v", err)
+	}
+}

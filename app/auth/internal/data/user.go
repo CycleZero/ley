@@ -20,8 +20,10 @@ import (
 
 type UserPO struct {
 	gorm.Model
-	Username string `gorm:"column:username;type:varchar(32);uniqueIndex:idx_users_username,where:deleted_at IS NULL;not null"`
-	Email    string `gorm:"column:email;type:varchar(255);uniqueIndex:idx_users_email,where:deleted_at IS NULL;not null"`
+	// MySQL 基线：不使用 PG 式 partial unique index（where deleted_at IS NULL），
+	// 因此软删用户的用户名/邮箱不可自动复用（复用需显式改名策略）。
+	Username string `gorm:"column:username;type:varchar(32);uniqueIndex;not null"`
+	Email    string `gorm:"column:email;type:varchar(255);uniqueIndex;not null"`
 	Password string `gorm:"column:password;type:varchar(255);not null" json:"-"`
 	Avatar   string `gorm:"column:avatar;type:varchar(512);default:''"`
 	Bio      string `gorm:"column:bio;type:text"`
