@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	config "github.com/CycleZero/ley/api/gateway/config/v1"
@@ -24,12 +23,6 @@ var logger = log.NewHelper(log.With(log.GetLogger(), "source", "middleware/ratel
 func init() {
 	middleware.Register("ratelimit", Middleware)
 }
-
-var (
-	once    sync.Once
-	client  *redis.Client
-	options *v1.RateLimit
-)
 
 // Middleware creates a Redis-based fixed-window rate limit middleware.
 //
@@ -51,23 +44,22 @@ func Middleware(c *config.Middleware) (middleware.Middleware, error) {
 		return func(next http.RoundTripper) http.RoundTripper { return next }, nil
 	}
 
-	once.Do(func() {
-		options = opts
-		redisDB := 0
-		if opts.RedisDb > 0 {
-			redisDB = int(opts.RedisDb)
-		}
-		client = redis.NewClient(&redis.Options{
-			Addr:     opts.RedisAddr,
-			Password: opts.RedisPassword,
-			DB:       redisDB,
-		})
-		logger.Infof("rate limit middleware initialized, rules=%d", len(opts.Rules))
+	// B-305: 每次工厂调用创建独立 Redis 客户端与配置快照
+	//（原包级 sync.Once 单例导致配置热载后规则/连接永不更新）
+	redisDB := 0
+	if opts.RedisDb > 0 {
+		redisDB = int(opts.RedisDb)
+	}
+	client := redis.NewClient(&redis.Options{
+		Addr:     opts.RedisAddr,
+		Password: opts.RedisPassword,
+		DB:       redisDB,
 	})
+	logger.Infof("rate limit middleware initialized, rules=%d", len(opts.Rules))
 
 	return func(next http.RoundTripper) http.RoundTripper {
 		return middleware.RoundTripperFunc(func(req *http.Request) (*http.Response, error) {
-			rule := matchRule(req.URL.Path, options.Rules)
+			rule := matchRule(req.URL.Path, opts.Rules)
 			if rule == nil {
 				return next.RoundTrip(req)
 			}
@@ -89,16 +81,15 @@ func Middleware(c *config.Middleware) (middleware.Middleware, error) {
 
 			if count > rule.MaxRequests {
 				return &http.Response{
-					StatusCode: int(options.LimitStatusCode),
-					Status:     http.StatusText(int(options.LimitStatusCode)),
+					StatusCode: int(opts.LimitStatusCode),
+					Status:     http.StatusText(int(opts.LimitStatusCode)),
 					Header: http.Header{
 						"Content-Type":           {"application/json"},
 						"X-RateLimit-Limit":      {strconv.FormatInt(rule.MaxRequests, 10)},
 						"X-RateLimit-Remaining":  {"0"},
 						"Retry-After":            {strconv.FormatInt(int64(rule.Window.AsDuration().Seconds()), 10)},
 					},
-					Body: io.NopCloser(bytes.NewBufferString(
-						`{"code":429,"message":"` + options.LimitMessage + `"}`)),
+					Body: io.NopCloser(bytes.NewReader(buildLimitEnvelope(int(opts.LimitStatusCode), opts.LimitMessage))),
 				}, nil
 			}
 
@@ -110,6 +101,12 @@ func Middleware(c *config.Middleware) (middleware.Middleware, error) {
 			return resp, err
 		})
 	}, nil
+}
+
+// buildLimitEnvelope 构造与 wrapresp 错误一致的统一信封：
+// {"code":<status>,"msg":"<msg>","data":null}（B-304）
+func buildLimitEnvelope(code int, msg string) []byte {
+	return []byte(`{"code":` + strconv.Itoa(code) + `,"msg":` + strconv.Quote(msg) + `,"data":null}`)
 }
 
 // matchRule finds the first rule whose pattern matches the request path.
