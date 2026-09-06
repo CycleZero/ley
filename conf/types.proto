@@ -6,10 +6,16 @@ option go_package = "github.com/CycleZero/ley/conf";
 import "google/protobuf/duration.proto";
 
 
+// Minio 对象存储配置（消息名与 yaml 段名保持 minio 不变以兼容既有配置，
+// 通过 provider 字段选择后端：minio（默认，S3 兼容）/ aliyun）
 message Minio{
+  // MinIO/S3 兼容服务端点（如 127.0.0.1:9000）；provider=aliyun 时忽略
   string endpoint = 1;
   string access_key_id = 2;
   string access_key_secret = 3;
   string bucket_name = 4;
-//  string region = 5;
+  // 阿里云 OSS 地域（如 cn-hangzhou）；provider=minio 时忽略
+  string region = 5;
+  // 存储后端类型：minio（默认）/ aliyun
+  string provider = 6;
 }

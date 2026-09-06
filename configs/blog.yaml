@@ -51,8 +51,11 @@ nats:
   addr: nats://127.0.0.1:4222
   enable_jetstream: true      # 启用 JetStream 持久化
 
+# 对象存储：provider=minio（默认，S3 兼容端点）或 aliyun（阿里云 OSS，需 region）
 minio:
-  endpoint: 127.0.0.1:9000
+  provider: minio
+  endpoint: 127.0.0.1:9000   # aliyun 时忽略
   access_key_id: minioadmin
   access_key_secret: minioadmin
   bucket_name: ley-images
+  region: ""                 # aliyun 地域如 cn-hangzhou；minio 时忽略

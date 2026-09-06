@@ -181,15 +181,34 @@ func ProvideCache(confData *conf.Data) cache.Cache {
 	return cache.NewRedisCache(confData.Redis.Host, int(confData.Redis.Port), confData.Redis.Password, int(confData.Redis.Db))
 }
 
+// ProvideOSS 按配置选择对象存储后端：
+//   - provider=aliyun 时使用阿里云 OSS（Region 必填）
+//   - 默认（provider 为空或 minio）使用 MinIO/S3 兼容服务
 func ProvideOSS(sc *conf.Config) (oss.OSS, func()) {
-	client, err := minio.New(sc.Minio.Endpoint, &minio.Options{
+	// 阿里云 OSS：endpoint 字段忽略，Region 必填
+	if sc.Minio.Provider == "aliyun" {
+		o, err := oss.NewAliyunOSS(oss.AliyunConfig{
+			Region:          sc.Minio.Region,
+			AccessKeyID:     sc.Minio.AccessKeyId,
+			AccessKeySecret: sc.Minio.AccessKeySecret,
+			BucketName:      sc.Minio.BucketName,
+		})
+		if err != nil {
+			panic(fmt.Errorf("create aliyun oss client: %w", err))
+		}
+		return o, func() {}
+	}
+
+	// MinIO/S3 兼容：MinioOSS 包装 minio.Core（内嵌 Client 全部能力 +
+	// 分页列举 / multipart / 范围读等低层 API）
+	core, err := minio.NewCore(sc.Minio.Endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(sc.Minio.AccessKeyId, sc.Minio.AccessKeySecret, ""),
 		Secure: false,
 	})
 	if err != nil {
 		panic(fmt.Errorf("create minio client: %w", err))
 	}
-	o := oss.NewMinioOSS(client, sc.Minio.BucketName)
+	o := oss.NewMinioOSS(core, sc.Minio.BucketName)
 	return o, func() {}
 }
 

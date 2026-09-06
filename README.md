@@ -10,7 +10,7 @@ Ley 是一个采用 Go/Kratos 微服务 + Nuxt 4 全栈构建的个人博客平�
 - **标签 & 分类**：树形分类结构，灵活的文章组织方式
 - **评论系统**：嵌套回复，最大支持 5 级深度
 - **用户认证**：注册、登录、JWT 双令牌（15 分钟 Access + 7 天 Refresh）、Token 黑名单、个人资料管理
-- **文件上传**：集成 MinIO，支持服务端上传与预签名 URL 直传
+- **文件上传**：集成 MinIO / 阿里云 OSS，支持服务端上传与预签名 URL 直传
 - **站点配置**：后台可动态管理站点信息、背景、音乐播放列表
 - **暗色模式**：基于 `@nuxtjs/color-mode` 的系统/亮色/暗色切换
 - **可观测性**：OpenTelemetry 链路追踪、Prometheus 指标、结构化日志
@@ -29,7 +29,7 @@ Ley 是一个采用 Go/Kratos 微服务 + Nuxt 4 全栈构建的个人博客平�
 | GORM | ORM（PostgreSQL / MySQL） |
 | Redis | 缓存、Token 黑名单、分布式锁 |
 | NATS JetStream | 事件总线与消息队列 |
-| MinIO / 腾讯云 COS | 对象存储 |
+| MinIO / 阿里云 OSS | 对象存储（S3 兼容 / OSS SDK v2） |
 | OpenTelemetry | 链路追踪 |
 
 ### 前端

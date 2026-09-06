@@ -11,29 +11,18 @@ import (
 	"github.com/CycleZero/ley/pkg/oss"
 )
 
-// mockOSS implements oss.OSS for unit tests.
-type mockOSS struct{}
+// mockOSS 实现 oss.OSS 用于集成测试。
+// 嵌入 nil 接口自动满足全部方法签名（接口扩展时无需同步维护），
+// 仅覆盖测试路径实际调用的方法；未覆盖方法调用会 panic（测试未触达即安全）。
+type mockOSS struct {
+	oss.OSS
+}
 
 func (m *mockOSS) PutObject(ctx context.Context, key string, reader io.Reader, size int64, contentType string) error {
 	return nil
 }
-func (m *mockOSS) GetObject(ctx context.Context, key string) (io.ReadCloser, *oss.ObjectInfo, error) {
-	return nil, nil, nil
-}
-func (m *mockOSS) StatObject(ctx context.Context, key string) (*oss.ObjectInfo, error) {
-	return nil, nil
-}
 func (m *mockOSS) DeleteObject(ctx context.Context, key string) error {
 	return nil
-}
-func (m *mockOSS) GetPresignedURL(ctx context.Context, key string, expirySeconds int64) (string, error) {
-	return "", nil
-}
-func (m *mockOSS) CopyObject(ctx context.Context, sourceKey, destKey string) error {
-	return nil
-}
-func (m *mockOSS) ListObjects(ctx context.Context, prefix string) ([]oss.ObjectInfo, error) {
-	return nil, nil
 }
 func (m *mockOSS) GetPresignedPutURL(ctx context.Context, key, contentType string, expirySeconds int64) (string, error) {
 	return "https://presigned.example.com/" + key, nil

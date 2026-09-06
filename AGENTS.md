@@ -37,7 +37,7 @@ ley/
 │   ├── infra/              # 基础设施初始化（DB/Redis/MinIO，NATS 段为遗留死代码）
 │   ├── eventbus/           # 事件总线（生产接线为内存通道，NATS 实现就绪未启用）
 │   ├── cache/              # Redis 缓存（接口 + 实现）
-│   ├── oss/                # 对象存储（MinIO / 腾讯云 COS）
+│   ├── oss/                # 对象存储（MinIO / 阿里云 OSS，provider 切换）
 │   ├── mq/                 # 消息队列抽象（NATS JetStream + 内存实现；两服务当前用内存连接）
 │   ├── security/           # 密码哈希（bcrypt）
 │   ├── trace/              # OpenTelemetry 链路追踪
