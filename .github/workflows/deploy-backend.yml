@@ -95,24 +95,6 @@ jobs:
             ley-builder:v1=docker-image://ghcr.io/cyclezero/ley/ley-builder:latest
             ley-runtime:v1=docker-image://ghcr.io/cyclezero/ley/ley-runtime:latest
 
-      # ---------- Gateway 服务镜像 ----------
-      - name: Build and push gateway
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./app/gateway/Dockerfile
-          push: true
-          tags: |
-            ghcr.io/cyclezero/ley/ley-gateway:latest
-            ghcr.io/cyclezero/ley/ley-gateway:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            GOPROXY=https://proxy.golang.org,direct
-          build-contexts: |
-            ley-builder:v1=docker-image://ghcr.io/cyclezero/ley/ley-builder:latest
-            ley-runtime:v1=docker-image://ghcr.io/cyclezero/ley/ley-runtime:latest
-
       # ---------- Entry 入口服务镜像（T13 共存期随后端发布，T14 切换后接替 gateway） ----------
       - name: Build and push entry
         uses: docker/build-push-action@v5
@@ -139,7 +121,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [build-backend]
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    if: github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Checkout code
@@ -169,7 +151,7 @@ jobs:
             cd $COMPOSE_PROJECT
 
             echo '--- 拉取最新代码 ---'
-            git pull origin main
+            git pull origin master
 
             echo '--- 登录 GHCR ---'
             echo '$GHCR_PAT' | docker login ghcr.io -u CycleZero --password-stdin
@@ -177,22 +159,16 @@ jobs:
             echo '--- 拉取指定版本镜像 ---'
             docker pull ghcr.io/cyclezero/ley/ley-auth:${{ github.sha }}
             docker pull ghcr.io/cyclezero/ley/ley-blog:${{ github.sha }}
-            docker pull ghcr.io/cyclezero/ley/ley-gateway:${{ github.sha }}
             docker pull ghcr.io/cyclezero/ley/ley-entry:${{ github.sha }}
 
             echo '--- 标记为 compose 引用的 latest ---'
             docker tag ghcr.io/cyclezero/ley/ley-auth:${{ github.sha }} ghcr.io/cyclezero/ley/ley-auth:latest
             docker tag ghcr.io/cyclezero/ley/ley-blog:${{ github.sha }} ghcr.io/cyclezero/ley/ley-blog:latest
-            docker tag ghcr.io/cyclezero/ley/ley-gateway:${{ github.sha }} ghcr.io/cyclezero/ley/ley-gateway:latest
             docker tag ghcr.io/cyclezero/ley/ley-entry:${{ github.sha }} ghcr.io/cyclezero/ley/ley-entry:latest
 
-            echo '--- 重启服务 ---'
+            echo '--- 重启服务（T14：entry 为唯一 HTTP 入口，gateway 已退役）---'
             docker compose -f /projects/ley/docker-compose.yml down
-            # T13 共存阶段：显式拉起 gateway（entry 与 gateway 均默认监听 :8000，
-            # 同时 up 会争抢端口——服务器需先把 data/entry/configs/config.yaml 的
-            # server.http.addr 改为 0.0.0.0:8003 后再把 entry 加入列表）。
-            # T14 切换：gateway 退役后，此处改为 up -d entry，并删除 gateway。
-            docker compose -f /projects/ley/docker-compose.yml up -d auth blog gateway
+            docker compose -f /projects/ley/docker-compose.yml up -d entry auth blog
 
             echo '--- 清理旧镜像 ---'
             docker image prune -af --filter 'until=168h'
