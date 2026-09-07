@@ -47,8 +47,9 @@ func RegisterRouter(root *gin.Engine, serviceHub *proxy.ServiceHub) {
 			g = root.Group(apiV1BasePath, classMiddleWires(rule.Class)...)
 			classGroups[rule.Class] = g
 		}
-		// 表内 Path 为完整路径（含 /api/v1 前缀），注册到分组需剥离公共前缀
-		g.Handle(rule.Method, strings.TrimPrefix(rule.Path, apiV1BasePath), rule.Handler)
+		// 表内 Path 为完整路径（含 /api/v1 前缀），注册到分组需剥离公共前缀；
+		// 路由表用 {param} 花括号（可读性），gin 只认 :param——注册时转换
+		g.Handle(rule.Method, toGinPath(strings.TrimPrefix(rule.Path, apiV1BasePath)), rule.Handler)
 	}
 
 	// 健康检查：供探活/负载均衡使用
@@ -77,6 +78,22 @@ func RegisterRouter(root *gin.Engine, serviceHub *proxy.ServiceHub) {
 //	PUBLIC        → 可选认证（无 token 放行，有 token 注入身份）
 //	AUTH          → 强制认证（缺失/无效 token 一律 401）
 //	AUTHOR_OR_ADMIN / ADMIN → 强制认证 + 角色白名单（403 拦截越权）
+// toGinPath 将路由表的 {param} 花括号参数转换为 gin 的 :param 语法
+func toGinPath(path string) string {
+	var b strings.Builder
+	b.Grow(len(path))
+	for i := 0; i < len(path); i++ {
+		if path[i] == '{' {
+			b.WriteByte(':')
+			continue
+		}
+		if path[i] != '}' {
+			b.WriteByte(path[i])
+		}
+	}
+	return b.String()
+}
+
 func classMiddleWires(class RouteClass) []gin.HandlerFunc {
 	switch class {
 	case RouteClassPublic:
