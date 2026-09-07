@@ -71,6 +71,7 @@ jobs:
           context: .
           file: ./app/auth/Dockerfile
           push: true
+          provenance: false
           tags: |
             crpi-sys2vl4a59vmhka8.cn-hangzhou.personal.cr.aliyuncs.com/cyclezero/ley:ley-auth
             crpi-sys2vl4a59vmhka8.cn-hangzhou.personal.cr.aliyuncs.com/cyclezero/ley:ley-auth-${{ github.sha }}
@@ -90,6 +91,7 @@ jobs:
           context: .
           file: ./app/blog/Dockerfile
           push: true
+          provenance: false
           tags: |
             crpi-sys2vl4a59vmhka8.cn-hangzhou.personal.cr.aliyuncs.com/cyclezero/ley:ley-blog
             crpi-sys2vl4a59vmhka8.cn-hangzhou.personal.cr.aliyuncs.com/cyclezero/ley:ley-blog-${{ github.sha }}
@@ -109,6 +111,7 @@ jobs:
           context: .
           file: ./app/entry/Dockerfile
           push: true
+          provenance: false
           tags: |
             crpi-sys2vl4a59vmhka8.cn-hangzhou.personal.cr.aliyuncs.com/cyclezero/ley:ley-entry
             crpi-sys2vl4a59vmhka8.cn-hangzhou.personal.cr.aliyuncs.com/cyclezero/ley:ley-entry-${{ github.sha }}
