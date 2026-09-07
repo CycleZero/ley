@@ -157,8 +157,8 @@ body {
 
 /* ===== 文章正文 Markdown 样式（类名/.shiki 机制原封不动，仅配色适配蓝白） ===== */
 .markdown-body {
-  font-size: 0.9375rem;
-  line-height: 1.8;
+  font-size: 1rem;
+  line-height: 1.75;
   color: var(--text-primary);
   word-break: break-word;
 }
@@ -177,30 +177,34 @@ body {
 .markdown-body h5,
 .markdown-body h6 {
   margin: 1.8em 0 0.8em;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.4;
+  letter-spacing: -0.01em;
 }
 .markdown-body h1 {
-  font-size: 1.6em;
+  font-size: 1.7em;
   padding-bottom: 0.4em;
   border-bottom: 1px solid var(--border-light);
 }
 .markdown-body h2 {
-  font-size: 1.35em;
+  font-size: 1.4em;
   padding-bottom: 0.3em;
   border-bottom: 1px solid var(--border-light);
 }
 .markdown-body h3 {
-  font-size: 1.15em;
+  font-size: 1.2em;
 }
-.markdown-body h4,
+.markdown-body h4 {
+  font-size: 1.05em;
+}
 .markdown-body h5,
 .markdown-body h6 {
   font-size: 1em;
+  color: var(--text-secondary);
 }
 
 .markdown-body p {
-  margin: 0.9em 0;
+  margin: 1em 0;
 }
 
 .markdown-body a {
@@ -270,16 +274,52 @@ body {
   border: 1px solid var(--border-light);
 }
 
-/* 代码块 */
-.markdown-body pre {
+/* 代码块容器（语言标签 + 复制按钮 + pre） */
+.markdown-body .code-block {
   margin: 1.2em 0;
-  padding: 1em 1.2em;
   border-radius: var(--radius-xl);
   border: 1px solid var(--border-light);
   background: var(--bg-input);
+  overflow: hidden;
+}
+.markdown-body .code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4em 1em;
+  border-bottom: 1px solid var(--border-light);
+  background: color-mix(in srgb, var(--bg-hover) 60%, transparent);
+  font-size: 0.75rem;
+}
+.markdown-body .code-block-lang {
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
+  text-transform: lowercase;
+}
+.markdown-body .code-block-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  padding: 0.2em 0.6em;
+  border: 1px solid var(--border-light);
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.markdown-body .code-block-copy:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.markdown-body pre {
+  margin: 0;
+  padding: 1em 1.2em;
   overflow-x: auto;
   font-size: 0.85rem;
   line-height: 1.7;
+  background: transparent;
 }
 .markdown-body pre code {
   background: transparent;
@@ -287,22 +327,21 @@ body {
   padding: 0;
   color: inherit;
 }
+/* Shiki 双主题：light 用 inline style，dark 用 --shiki-dark 变量 */
 .markdown-body .shiki {
   background: transparent !important;
-}
-.markdown-body .shiki span {
-  color: var(--shiki-light) !important;
 }
 html[data-theme="dark"] .markdown-body .shiki span {
   color: var(--shiki-dark) !important;
 }
 
 .markdown-body table {
+  display: block;
   width: 100%;
   margin: 1.2em 0;
   border-collapse: collapse;
   font-size: 0.9em;
-  overflow: hidden;
+  overflow-x: auto;
   border-radius: var(--radius-lg);
 }
 .markdown-body th,
@@ -318,6 +357,9 @@ html[data-theme="dark"] .markdown-body .shiki span {
 }
 .markdown-body tr:nth-child(even) td {
   background: color-mix(in srgb, var(--bg-hover) 50%, transparent);
+}
+.markdown-body tbody tr:hover td {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
 
 .markdown-body hr {

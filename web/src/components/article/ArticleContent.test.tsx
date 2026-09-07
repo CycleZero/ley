@@ -52,6 +52,13 @@ describe("ArticleContent", () => {
     expect(token!.getAttribute("style")).toContain("--shiki");
   });
 
+  it("代码块显示语言标签与复制按钮", async () => {
+    renderContent("```go\npackage main\n```");
+    const lang = await screen.findByText("go");
+    expect(lang.className).toContain("code-block-lang");
+    expect(screen.getByRole("button", { name: "复制代码" })).toBeInTheDocument();
+  });
+
   it("行内代码渲染", async () => {
     renderContent("运行 `go run` 命令");
     const inline = await screen.findByText("go run");
