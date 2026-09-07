@@ -77,7 +77,9 @@ func callProto(c *gin.Context,
 	// 4. 成功：protojson 序列化 reply → snake_case（UseProtoNames，与 auth 服务
 	//    kratosjson.MarshalOptions.UseProtoNames = true 的对外契约一致），
 	//    data 直接携带原始 JSON（json.RawMessage 内联，避免 map 二次编码漂移）
-	data, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(reply)
+	//    EmitUnpopulated：输出空 repeated 为 []（如空文章列表 articles:[]），
+	//    与 blog/auth 的 kratos 编码器行为对齐——否则前端读 .length 崩溃
+	data, err := protojson.MarshalOptions{UseProtoNames: true, EmitUnpopulated: true}.Marshal(reply)
 	if err != nil {
 		common.Fail(c, http.StatusInternalServerError, http.StatusInternalServerError, "服务内部错误")
 		return
