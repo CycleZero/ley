@@ -57,6 +57,13 @@ jobs:
           username: CycleZero
           password: ${{ secrets.GHCR_PAT }}
 
+      - name: Log in to ACR
+        uses: docker/login-action@v3
+        with:
+          registry: crpi-sys2vl4a59vmhka8.cn-hangzhou.personal.cr.aliyuncs.com
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
       # ---------- Auth 服务镜像 ----------
       - name: Build and push auth
         uses: docker/build-push-action@v5
@@ -65,8 +72,8 @@ jobs:
           file: ./app/auth/Dockerfile
           push: true
           tags: |
-            ghcr.io/cyclezero/ley/ley-auth:latest
-            ghcr.io/cyclezero/ley/ley-auth:${{ github.sha }}
+            crpi-sys2vl4a59vmhka8.cn-hangzhou.personal.cr.aliyuncs.com/cyclezero/ley:ley-auth
+            crpi-sys2vl4a59vmhka8.cn-hangzhou.personal.cr.aliyuncs.com/cyclezero/ley:ley-auth-${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
@@ -84,8 +91,8 @@ jobs:
           file: ./app/blog/Dockerfile
           push: true
           tags: |
-            ghcr.io/cyclezero/ley/ley-blog:latest
-            ghcr.io/cyclezero/ley/ley-blog:${{ github.sha }}
+            crpi-sys2vl4a59vmhka8.cn-hangzhou.personal.cr.aliyuncs.com/cyclezero/ley:ley-blog
+            crpi-sys2vl4a59vmhka8.cn-hangzhou.personal.cr.aliyuncs.com/cyclezero/ley:ley-blog-${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
@@ -103,8 +110,8 @@ jobs:
           file: ./app/entry/Dockerfile
           push: true
           tags: |
-            ghcr.io/cyclezero/ley/ley-entry:latest
-            ghcr.io/cyclezero/ley/ley-entry:${{ github.sha }}
+            crpi-sys2vl4a59vmhka8.cn-hangzhou.personal.cr.aliyuncs.com/cyclezero/ley:ley-entry
+            crpi-sys2vl4a59vmhka8.cn-hangzhou.personal.cr.aliyuncs.com/cyclezero/ley:ley-entry-${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
@@ -144,6 +151,8 @@ jobs:
           SERVER_PORT: ${{ secrets.SERVER_PORT || '2366' }}
           COMPOSE_PROJECT: ${{ secrets.COMPOSE_PROJECT || '/projects/ley' }}
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
+          ACR_USERNAME: ${{ secrets.ACR_USERNAME }}
+          ACR_PASSWORD: ${{ secrets.ACR_PASSWORD }}
         run: |
           echo "=== 部署后端到 $SERVER_HOST ==="
           # 直接传输 compose 文件（服务器访问 github.com 慢/超时，不依赖 git pull）
@@ -152,22 +161,18 @@ jobs:
             set -e
             cd $COMPOSE_PROJECT
 
-            echo '--- 登录 GHCR ---'
-            echo '$GHCR_PAT' | docker login ghcr.io -u CycleZero --password-stdin
+            echo '--- 登录 ACR（VPC 内网）---'
+            echo '$ACR_PASSWORD' | docker login crpi-sys2vl4a59vmhka8-vpc.cn-hangzhou.personal.cr.aliyuncs.com -u $ACR_USERNAME --password-stdin
 
-            echo '--- 拉取指定版本镜像（ghcr.io 偶发慢，重试 2 次）---'
-            for img in auth blog entry; do
-              for i in 1 2 3; do
-                timeout 300 docker pull ghcr.io/cyclezero/ley/ley-$img:${{ github.sha }} && break
-                echo "ley-$img 第 $i 次拉取失败，重试..."
-                sleep 5
-              done
-            done
+            echo '--- 拉取指定版本镜像（ACR VPC 内网，快）---'
+            docker pull crpi-sys2vl4a59vmhka8-vpc.cn-hangzhou.personal.cr.aliyuncs.com/cyclezero/ley:ley-auth-${{ github.sha }}
+            docker pull crpi-sys2vl4a59vmhka8-vpc.cn-hangzhou.personal.cr.aliyuncs.com/cyclezero/ley:ley-blog-${{ github.sha }}
+            docker pull crpi-sys2vl4a59vmhka8-vpc.cn-hangzhou.personal.cr.aliyuncs.com/cyclezero/ley:ley-entry-${{ github.sha }}
 
             echo '--- 标记为 compose 引用的 latest ---'
-            docker tag ghcr.io/cyclezero/ley/ley-auth:${{ github.sha }} ghcr.io/cyclezero/ley/ley-auth:latest
-            docker tag ghcr.io/cyclezero/ley/ley-blog:${{ github.sha }} ghcr.io/cyclezero/ley/ley-blog:latest
-            docker tag ghcr.io/cyclezero/ley/ley-entry:${{ github.sha }} ghcr.io/cyclezero/ley/ley-entry:latest
+            docker tag crpi-sys2vl4a59vmhka8-vpc.cn-hangzhou.personal.cr.aliyuncs.com/cyclezero/ley:ley-auth-${{ github.sha }} crpi-sys2vl4a59vmhka8-vpc.cn-hangzhou.personal.cr.aliyuncs.com/cyclezero/ley:ley-auth
+            docker tag crpi-sys2vl4a59vmhka8-vpc.cn-hangzhou.personal.cr.aliyuncs.com/cyclezero/ley:ley-blog-${{ github.sha }} crpi-sys2vl4a59vmhka8-vpc.cn-hangzhou.personal.cr.aliyuncs.com/cyclezero/ley:ley-blog
+            docker tag crpi-sys2vl4a59vmhka8-vpc.cn-hangzhou.personal.cr.aliyuncs.com/cyclezero/ley:ley-entry-${{ github.sha }} crpi-sys2vl4a59vmhka8-vpc.cn-hangzhou.personal.cr.aliyuncs.com/cyclezero/ley:ley-entry
 
             echo '--- 重启服务（T14：entry 为唯一 HTTP 入口，gateway 已退役）---'
             docker compose -f /projects/ley/docker-compose.yml down
