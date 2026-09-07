@@ -178,8 +178,8 @@ jobs:
             docker tag crpi-sys2vl4a59vmhka8-vpc.cn-hangzhou.personal.cr.aliyuncs.com/cyclezero/ley:ley-entry-${{ github.sha }} crpi-sys2vl4a59vmhka8-vpc.cn-hangzhou.personal.cr.aliyuncs.com/cyclezero/ley:ley-entry
 
             echo '--- 重启服务（T14：entry 为唯一 HTTP 入口，gateway 已退役）---'
-            docker compose -f /projects/ley/docker-compose.yml down
-            docker compose -f /projects/ley/docker-compose.yml up -d entry auth blog
+            docker-compose -f /projects/ley/docker-compose.yml down
+            docker-compose -f /projects/ley/docker-compose.yml up -d entry auth blog
 
             echo '--- 清理旧镜像 ---'
             docker image prune -af --filter 'until=168h'
