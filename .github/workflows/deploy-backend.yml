@@ -146,12 +146,11 @@ jobs:
           GHCR_PAT: ${{ secrets.GHCR_PAT }}
         run: |
           echo "=== 部署后端到 $SERVER_HOST ==="
+          # 直接传输 compose 文件（服务器访问 github.com 慢/超时，不依赖 git pull）
+          scp -P $SERVER_PORT docker-compose.yml $SERVER_USER@$SERVER_HOST:$COMPOSE_PROJECT/docker-compose.yml
           ssh -p $SERVER_PORT $SERVER_USER@$SERVER_HOST "
             set -e
             cd $COMPOSE_PROJECT
-
-            echo '--- 拉取最新代码 ---'
-            git pull origin master
 
             echo '--- 登录 GHCR ---'
             echo '$GHCR_PAT' | docker login ghcr.io -u CycleZero --password-stdin
