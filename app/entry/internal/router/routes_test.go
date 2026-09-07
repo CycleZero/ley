@@ -122,9 +122,9 @@ func TestRouteTableRegistered(t *testing.T) {
 		registered[r.Method+" "+r.Path]++
 	}
 
-	// 每条规则恰注册一次
+	// 每条规则恰注册一次（注册时 {param} 已转 :param，断言用转换后路径）
 	for _, rule := range rules {
-		key := rule.Method + " " + rule.Path
+		key := rule.Method + " " + toGinPath(rule.Path)
 		if n := registered[key]; n != 1 {
 			t.Fatalf("规则 %s 应恰注册 1 次，实际 %d 次", key, n)
 		}
