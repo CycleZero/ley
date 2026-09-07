@@ -119,7 +119,7 @@ jobs:
   deploy-backend:
     name: Deploy Backend
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     needs: [build-backend]
     if: github.ref == 'refs/heads/master' || github.event_name == 'workflow_dispatch'
 
@@ -155,10 +155,14 @@ jobs:
             echo '--- 登录 GHCR ---'
             echo '$GHCR_PAT' | docker login ghcr.io -u CycleZero --password-stdin
 
-            echo '--- 拉取指定版本镜像 ---'
-            docker pull ghcr.io/cyclezero/ley/ley-auth:${{ github.sha }}
-            docker pull ghcr.io/cyclezero/ley/ley-blog:${{ github.sha }}
-            docker pull ghcr.io/cyclezero/ley/ley-entry:${{ github.sha }}
+            echo '--- 拉取指定版本镜像（ghcr.io 偶发慢，重试 2 次）---'
+            for img in auth blog entry; do
+              for i in 1 2 3; do
+                timeout 300 docker pull ghcr.io/cyclezero/ley/ley-$img:${{ github.sha }} && break
+                echo "ley-$img 第 $i 次拉取失败，重试..."
+                sleep 5
+              done
+            done
 
             echo '--- 标记为 compose 引用的 latest ---'
             docker tag ghcr.io/cyclezero/ley/ley-auth:${{ github.sha }} ghcr.io/cyclezero/ley/ley-auth:latest
