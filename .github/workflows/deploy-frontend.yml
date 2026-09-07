@@ -5,6 +5,7 @@ on:
     branches: [main, master]
     paths:
       - 'web/**'
+      - '.github/workflows/**'
   workflow_dispatch:
     inputs:
       deploy_target:
