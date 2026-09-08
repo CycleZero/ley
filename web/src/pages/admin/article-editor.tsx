@@ -80,7 +80,7 @@ export default function ArticleEditor() {
       excerpt: excerpt.trim() || undefined,
       cover_image: coverImage.trim() || undefined,
       category_id: categoryId ? Number(categoryId) : undefined,
-      tags: tags.length > 0 ? tags : undefined,
+      tag_names: tags.length > 0 ? tags : undefined,
       status,
     };
     try {
