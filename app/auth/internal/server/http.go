@@ -8,6 +8,7 @@ import (
 	authv1 "github.com/CycleZero/ley/api/auth/v1"
 	"github.com/CycleZero/ley/app/auth/internal/service"
 	leyconf "github.com/CycleZero/ley/conf"
+	"github.com/CycleZero/ley/pkg/metrics"
 	pkgmw "github.com/CycleZero/ley/pkg/middleware"
 
 	"github.com/go-kratos/kratos/v2/log"
@@ -40,6 +41,14 @@ func NewHTTPServer(bs *leyconf.Bootstrap, svc *service.AuthService, logger log.L
 	srv.HandleFunc("/readyz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
+	})
+	// Prometheus 指标抓取端点（metrics 未初始化时 404）
+	srv.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+		if handler := metrics.DefaultHandler(); handler != nil {
+			handler.ServeHTTP(w, r)
+			return
+		}
+		http.NotFound(w, r)
 	})
 
 	return srv

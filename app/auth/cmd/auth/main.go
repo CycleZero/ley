@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 
@@ -8,6 +9,7 @@ import (
 	commonconf "github.com/CycleZero/ley/conf"
 	"github.com/CycleZero/ley/pkg/infra"
 	locallog "github.com/CycleZero/ley/pkg/log"
+	"github.com/CycleZero/ley/pkg/metrics"
 	"github.com/CycleZero/ley/pkg/trace"
 	"github.com/CycleZero/ley/pkg/util"
 
@@ -118,6 +120,10 @@ func main() {
 	if bc.Etcd == nil || len(bc.Etcd.Endpoints) == 0 {
 		panic("config error: etcd.endpoints is required in bootstrap config")
 	}
+	// 初始化可观测指标（Prometheus /metrics，OTel 兼容；与追踪共用 MeterProvider）
+	if _, err := metrics.New(util.DisServiceName(conf.ServiceName)); err != nil {
+		logger.Log(log.LevelError, "init metrics error", err)
+	}
 	etcdClient := infra.NewEtcdClient(bc.Etcd.Endpoints)
 	defer etcdClient.Close()
 	logger.Log(log.LevelInfo, "init logger success")
@@ -158,12 +164,16 @@ func main() {
 		panic(err)
 	}
 
-	// 初始化Tracer
+	// 初始化Tracer（OTLP/HTTP + W3C 上下文传播；退出时刷出缓冲 span）
 	if bc.Trace != nil && bc.Trace.Endpoint != "" {
-		err = trace.InitTracer(bc.Trace.Endpoint, util.DisServiceName(conf.ServiceName))
-		if err != nil {
+		if _, err = trace.Init(trace.Config{
+			Endpoint:    bc.Trace.Endpoint,
+			ServiceName: util.DisServiceName(conf.ServiceName),
+			Insecure:    true,
+		}); err != nil {
 			logger.Log(log.LevelError, "init tracer error", err)
 		}
+		defer func() { _ = trace.Shutdown(context.Background()) }()
 	}
 	//logger.Log(log.LevelInfo, "最终配置内容", bc.String())
 	app, cleanup, err := wireApp(
