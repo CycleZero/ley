@@ -10,9 +10,7 @@
 # 因此编译路径直接写死 ./app/entry。
 #
 # 运行期监听端口不在此硬编码：由本地引导配置
-# data/entry/configs/config.yaml 的 server.http.addr 决定
-# （默认 :8000，即旧 gateway 的入口端口；T13 与 gateway 共存阶段
-# 需在引导配置中改 0.0.0.0:8003，见 docker-compose.yml 注释）。
+# data/entry/configs/config.yaml 的 server.http.addr 决定（默认 :8000）。
 
 # ================================
 # Stage 1: Builder

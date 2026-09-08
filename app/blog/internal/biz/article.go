@@ -226,7 +226,7 @@ const (
 // CreateArticle — 创建文章（草稿状态）
 //
 // 流程步骤（共7步）：
-//  1. 从 context 提取当前登录用户 ID（由 Gateway JWT 中间件注入）
+//  1. 从 context 提取当前登录用户 ID（由 entry JWT 中间件注入）
 //  2. 校验标题长度 (2-200) 和内容非空且不超过 100000 字符
 //  3. 根据标题生成 URL slug：
 //     a. 英文字母 → 小写保留，数字保留
@@ -248,7 +248,7 @@ func (uc *ArticleUseCase) CreateArticle(ctx context.Context, title, content, exc
 	defer func() { recordResult(ctx, uc.metrics.create, err) }()
 	// ===================================================================
 	// 步骤1: 从 context 中提取当前登录用户 ID
-	// 该值由 Gateway 的 JWT 验证中间件在请求到达前注入到 context.Value("user_id")
+	// 该值由 entry 的 JWT 验证中间件经 pkg/meta 注入到请求上下文
 	// ===================================================================
 	authorID, err := getCurrentUserID(ctx)
 	if err != nil {
@@ -1388,7 +1388,7 @@ func normalizeCategoryID(categoryID *uint) *uint {
 
 // getCurrentUserID 从 pkg/meta 获取当前登录用户 ID。
 //
-// 用户认证信息由 Gateway JWT 中间件注入到 Kratos metadata（x-md-global- 全局透传）。
+// 用户认证信息由 entry JWT 中间件注入到 Kratos metadata（x-md-global- 全局透传）。
 // GetRequestMetaData 优先从服务端上下文解析，失败则回退到客户端上下文。
 func getCurrentUserID(ctx context.Context) (uint64, error) {
 	reqMeta := meta.GetRequestMetaData(ctx)

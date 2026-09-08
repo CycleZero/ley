@@ -15,7 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// 静态允许头（与前端契约/旧 gateway 配置对齐）。
+// 静态允许头（与前端契约对齐）。
 const (
 	corsAllowMethods = "GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS"
 	corsAllowHeaders = "Origin, X-Requested-With, Content-Type, Accept, Authorization"

@@ -12,9 +12,7 @@
 server:
   http:
     network: tcp
-    # ⚠️ T13 与 gateway 共存阶段用 :8003（:8000 被 gateway 占用，:8001/:8002 被
-    # auth/blog HTTP 占用）；T14 gateway 退役后改回 0.0.0.0:8000 成为唯一入口。
-    addr: 0.0.0.0:8003
+    addr: 0.0.0.0:8000
     timeout: 3s
 
 log:

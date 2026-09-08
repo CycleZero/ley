@@ -48,13 +48,13 @@ Ley 是一个采用 Go/Kratos 微服务 + Nuxt 4 全栈构建的个人博客平�
 ## 架构
 
 ```
-客户端（Web） ──HTTP──> Gateway (:8000) ──gRPC──> Auth (:9001)
-                                                ──gRPC──> Blog (:9002)
+客户端（Web） ──HTTP──> Entry (:8000) ──gRPC──> Auth (:9001)
+                                      ──gRPC──> Blog (:9002)
 ```
 
-- **Gateway**：HTTP 入口网关，负责 JWT 校验、CORS、限流、熔断、链路追踪、请求路由转发
+- **Entry**：Gin 统一 HTTP 入口，负责 JWT 校验、CORS、限流、链路追踪、指标、请求转发与信封响应
 - **Auth**：用户注册/登录/JWT 管理/个人资料 CRUD
-- **Blog**：文章/评论/标签/分类/文件/站点配置管理
+- **Blog**：文章/标签/分类/文件/站点配置管理
 
 ---
 
@@ -65,11 +65,11 @@ ley/
 ├── api/                    # Proto API 定义（gRPC + HTTP/REST）
 │   ├── auth/v1/
 │   ├── blog/v1/
-│   └── gateway/
+│   └── common/v1/
 ├── app/                    # 微服务实现
 │   ├── auth/               # 认证服务
 │   ├── blog/               # 博客服务
-│   └── gateway/            # API 网关
+│   └── entry/              # Gin 统一入口（JWT/CORS/限流/转发/信封）
 ├── web/                    # Nuxt 4 前端
 │   ├── app/pages/          # 文件路由页面
 │   ├── app/stores/         # Pinia 状态管理
@@ -108,11 +108,8 @@ make init
 ### 构建后端
 
 ```bash
-# 构建 auth + blog 服务
+# 构建 auth + blog + entry 服务
 make build
-
-# 构建网关（独立模块）
-make build-gateway
 
 # 完整重新构建：proto 生成 + wire + 编译
 make rebuild
@@ -134,7 +131,7 @@ pnpm build
 # 单独运行（开发模式）
 ./bin/auth -conf ./data/auth/configs
 ./bin/blog -conf ./data/blog/configs
-./bin/gateway -conf ./data/gateway/configs
+./bin/entry -conf ./data/entry/configs
 ```
 
 或一键启动全部（Docker）：
@@ -155,7 +152,7 @@ make api              # 从 api/ 生成 pb.go、http、grpc、openapi
 make config           # 从 conf/ 和 app/**/internal/conf/ 生成配置 proto 代码
 make internal_proto   # 生成 app/ 内部 proto 代码
 make wire             # 为所有服务运行 Wire 依赖注入生成
-make wire-all         # 所有服务 + gateway 运行 wire
+make wire-all         # 所有服务运行 wire
 make rebuild          # api + config + internal_proto + wire + build（完整重新构建）
 
 make test-unit        # 运行单元测试（含覆盖率）
@@ -178,14 +175,14 @@ pnpm dev        # 启动 Nuxt 开发服务器（:3000）
 
 ### Docker Compose（推荐）
 
-项目已提供 `docker-compose.yml`，使用 **host 网络模式** 编排 Gateway、Auth、Blog 三个服务：
+项目已提供 `docker-compose.yml`，使用 **host 网络模式** 编排 Entry、Auth、Blog 三个服务：
 
 ```bash
 docker-compose build
 docker-compose up -d
 ```
 
-- Gateway 暴露 `:8000`
+- Entry 暴露 `:8000`（唯一 HTTP 入口）
 - Auth 暴露 `:9001`（gRPC）/ `:8001`（HTTP）
 - Blog 暴露 `:9002`（gRPC）/ `:8002`（HTTP）
 

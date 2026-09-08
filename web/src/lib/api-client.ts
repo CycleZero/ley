@@ -1,8 +1,8 @@
 import { ofetch } from "ofetch";
 import type { FetchOptions } from "ofetch";
 
-// 统一响应格式 (Gateway wrapresp)
-interface GatewayResponse<T> {
+// 统一响应格式 (entry wrapresp 信封)
+interface ApiEnvelope<T> {
   code: number;
   msg: string;
   data: T;
@@ -37,7 +37,7 @@ function refreshToken(): Promise<boolean> {
       const refreshToken = getCookie("ley_rt");
       if (!refreshToken) return false;
       try {
-        const res = await rawClient<GatewayResponse<{ token_pair: { access_token: string; refresh_token: string } }>>(
+        const res = await rawClient<ApiEnvelope<{ token_pair: { access_token: string; refresh_token: string } }>>(
           "/auth/refresh",
           { method: "POST", body: { refresh_token: refreshToken } },
         );
@@ -68,7 +68,7 @@ const rawClient = ofetch.create({
 });
 
 /**
- * 统一请求入口：Bearer 注入 + 401 单飞刷新重试 + 解包 Gateway 统一响应
+ * 统一请求入口：Bearer 注入 + 401 单飞刷新重试 + 解包统一响应信封
  *
  * 页面/组件禁止直接使用 ofetch/fetch，一律走此函数（经 hooks/use-*.ts）。
  * 返回解包后的 data（code !== 0 时抛错）。
@@ -76,9 +76,9 @@ const rawClient = ofetch.create({
 export async function api<T>(path: string, options: FetchOptions = {}): Promise<T> {
   const opts = options as RetriableOptions;
 
-  let res: GatewayResponse<T>;
+  let res: ApiEnvelope<T>;
   try {
-    res = await rawClient<GatewayResponse<T>>(path, opts);
+    res = await rawClient<ApiEnvelope<T>>(path, opts);
   } catch (err) {
     // 401 → 刷新 token 后重试一次
     const status = (err as { response?: { status?: number } } | null)?.response?.status;
@@ -91,7 +91,7 @@ export async function api<T>(path: string, options: FetchOptions = {}): Promise<
           const headers = new Headers(opts.headers);
           headers.set("Authorization", `Bearer ${newToken}`);
           opts.headers = headers;
-          res = await rawClient<GatewayResponse<T>>(path, opts);
+          res = await rawClient<ApiEnvelope<T>>(path, opts);
         } else {
           clearTokenCookies();
           throw err;

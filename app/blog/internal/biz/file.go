@@ -396,7 +396,7 @@ func (uc *FileUseCase) ListFiles(ctx context.Context, page, pageSize int) ([]*Fi
 // =============================================================================
 // GetPresignedPutURL — 获取预签名上传 URL
 //
-// 用于客户端直传 MinIO 的场景（避免流量经过 Gateway/Blog 服务）。
+// 用于客户端直传 MinIO 的场景（避免流量经过 entry/Blog 服务）。
 //
 // 流程：
 //  1. 校验扩展名白名单

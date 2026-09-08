@@ -29,8 +29,8 @@ Ley 是一个个人博客平台，支持文章发布、评论互动、文件管�
                                        │ HTTPS
                                        ▼
                         ┌──────────────────────────────┐
-                        │        Gateway :8000          │
-                        │  HTTP REST + gRPC-Gateway     │
+                        │        Entry :8000           │
+                        │  HTTP REST + gRPC 转发        │
                         │                              │
                         │  JWT 验证 · CORS · 限流      │
                         │  路由转发 · 静态资源代理      │
@@ -77,7 +77,7 @@ Ley 是一个个人博客平台，支持文章发布、评论互动、文件管�
 
 | 服务 | gRPC | HTTP | 数据库 Schema | 外部依赖 | 职责 |
 |------|------|------|--------------|---------|------|
-| **Gateway** | — | 8000 | — | — | HTTP 入口，JWT 验证，路由转发，CORS，限流 |
+| **Entry** | — | 8000 | — | Redis（黑名单） | HTTP 入口（Gin），JWT 验证，转发，CORS，限流，链路/指标 |
 | **Auth** | 9001 | 8001 | user | Redis（黑名单） | 注册/登录，JWT 签发，Token 刷新/黑名单，用户资料 |
 | **Blog** | 9002 | 8002 | article, comment | Redis, MinIO | 文章CRUD、评论CRUD、标签/分类管理、搜索（预留）、点赞、文件上传 |
 | **Notification** | 9003 | — | notify | SMTP/SendGrid | NATS 消费者：评论回复邮件、新文章推送、欢迎邮件、通知历史 |
@@ -87,8 +87,8 @@ Ley 是一个个人博客平台，支持文章发布、评论互动、文件管�
 
 | 服务 | 拆出理由 | 通信方式 |
 |------|---------|---------|
-| Auth | JWT 密钥隔离，用户数据与博客内容天然分离 | Gateway→Auth (gRPC) |
-| Blog | 文章/评论/标签/分类高度耦合，同一事务保证计数一致性 | Gateway→Blog (gRPC) |
+| Auth | JWT 密钥隔离，用户数据与博客内容天然分离 | Entry→Auth (gRPC) |
+| Blog | 文章/评论/标签/分类高度耦合，同一事务保证计数一致性 | Entry→Blog (gRPC) |
 | Notification | 纯异步 NATS 消费者，依赖外部 SMTP，与核心业务零耦合 | NATS 消费 |
 | Analytics | 写入密集（每次页面访问一条记录），与核心业务负载特征不同，可独立扩缩容 | HTTP 埋点 + NATS 消费 |
 
@@ -631,7 +631,7 @@ message ArticleStat {
 ### 5.1 用户注册
 
 ```
-Client → Gateway → Auth.Register
+Client → Entry → Auth.Register
   1. 校验输入（用户名格式、密码强度）
   2. 检查用户名/邮箱唯一性（应用层 + DB 唯一约束）
   3. bcrypt 哈希密码
@@ -644,7 +644,7 @@ Client → Gateway → Auth.Register
 
 ```
 登录:
-  Client → Gateway → Auth.Login
+  Client → Entry → Auth.Login
     1. 按用户名或邮箱查找用户
     2. bcrypt 验证密码
     3. 检查账号状态 (active/disabled)
@@ -652,7 +652,7 @@ Client → Gateway → Auth.Register
     5. 返回 TokenPair + UserInfo
 
 刷新令牌 (Token Rotation):
-  Client → Gateway → Auth.RefreshToken
+  Client → Entry → Auth.RefreshToken
     1. 验证 RefreshToken 签名和类型
     2. 检查黑名单（防重放攻击）
     3. 查询用户状态
@@ -661,7 +661,7 @@ Client → Gateway → Auth.Register
     6. 返回新 TokenPair + UserInfo
 
 登出:
-  Client → Gateway → Auth.Logout
+  Client → Entry → Auth.Logout
     1. 提取 Bearer token（来自请求 header）
     2. 验证 AccessToken 有效性
     3. AccessToken + RefreshToken 加入黑名单
@@ -671,8 +671,8 @@ Client → Gateway → Auth.Register
 
 ```
 创建草稿:
-  Client → Gateway → Blog.CreateArticle
-    1. Gateway 验证 JWT，注入 user_id 到 gRPC metadata
+  Client → Entry → Blog.CreateArticle
+    1. Entry 验证 JWT，注入 user_id 到 gRPC metadata
     2. Blog 从 context 提取 author_id
     3. 校验标题/内容长度
     4. 生成唯一 slug（拼音 + 数字后缀）
@@ -686,7 +686,7 @@ Client → Gateway → Auth.Register
     7. 返回 ArticleInfo
 
 发布:
-  Client → Gateway → Blog.PublishArticle
+  Client → Entry → Blog.PublishArticle
     1. 权限校验：当前用户 == 作者
     2. 状态校验：当前状态 != published
     3. DB 事务:
@@ -699,7 +699,7 @@ Client → Gateway → Auth.Register
        → Notification 消费 → 发送新文章推送邮件
 
 归档:
-  Client → Gateway → Blog.ArchiveArticle
+  Client → Entry → Blog.ArchiveArticle
     DB 事务:
       BEGIN
         UPDATE articles SET status=archived WHERE id=?
@@ -708,7 +708,7 @@ Client → Gateway → Auth.Register
       COMMIT
 
 删除:
-  Client → Gateway → Blog.DeleteArticle
+  Client → Entry → Blog.DeleteArticle
     DB 事务:
       BEGIN
         DELETE FROM articles_tags WHERE article_id=?
@@ -721,7 +721,7 @@ Client → Gateway → Auth.Register
 ### 5.4 创建评论
 
 ```
-Client → Gateway → Blog.CreateComment
+Client → Entry → Blog.CreateComment
   1. 校验内容长度 (1-2000 字符，UTF-8)
   2. 若有 parent_id:
      a. 查询父评论获取 depth
@@ -837,9 +837,9 @@ ley/
 │   ├── analytics/              # Analytics 服务
 │   │   ├── cmd/main.go, wire.go
 │   │   └── internal/{biz,data,service,conf}
-│   └── gateway/                # API 网关
-│       ├── cmd/main.go, wire.go
-│       └── internal/{service,server,conf}
+│   └── entry/                  # 统一入口（Gin）
+│       ├── cmd/entry/
+│       └── internal/{common,domain/proxy,router}
 │
 ├── pkg/                        # 共享库
 │   ├── cache/ eventbus/ infra/ jwt/ log/ meta/ middleware/
@@ -972,9 +972,9 @@ new: {"site_title":"B"}
 | `site:config` | SiteConfig JSON | 10min | SaveConfig / UpdatePlaylist |
 | `site:backgrounds` | []SiteBackground JSON | 30min | AddBackground / DeleteBackground / SetActiveBackground |
 
-### 9.4 Gateway 中间件
+### 9.4 Entry 中间件
 
-Gateway 对 `/api/v1/site/*` 的写方法（POST/PUT/DELETE）增加角色校验：
+Entry 对 `/api/v1/site/*` 的写方法（POST/PUT/DELETE）增加角色校验：
 
 ```
 中间件栈: JWT 验证 → RoleCheck("admin") → 路由转发
@@ -1001,7 +1001,7 @@ Gateway 对 `/api/v1/site/*` 的写方法（POST/PUT/DELETE）增加角色校验
 ### 决策 4：文件上传
 
 - 推荐方案：客户端通过预签名 URL 直传 MinIO，上传完成后通知 Blog 服务关联文件记录
-- 备选方案：Gateway 层处理 multipart，转发 bytes 给 Blog gRPC
+- 备选方案：Entry 层处理 multipart，转发 bytes 给 Blog gRPC
 
 ### 决策 5：Notification 是纯 NATS 消费者
 
@@ -1022,7 +1022,7 @@ Gateway 对 `/api/v1/site/*` 的写方法（POST/PUT/DELETE）增加角色校验
 | Phase 1 | Proto 定义 + 生成代码 | api/ 目录完整，`make api` 通过 |
 | Phase 2 | Auth 服务 | 注册/登录/Token/资料 |
 | Phase 3 | Blog 服务 | 文章+评论+标签+分类+文件（搜索预留） |
-| Phase 4 | Gateway | HTTP 路由转发 + JWT 中间件 |
+| Phase 4 | Entry | HTTP 路由转发 + JWT 中间件 |
 | Phase 5 | Notification 服务 | NATS 消费者 + 邮件发送 + 通知历史 |
 | Phase 6 | Analytics 服务 | 埋点采集 + 定时聚合 + 仪表盘 |
 | Phase 7 | 集成测试 + docker-compose | 端到端验证 |

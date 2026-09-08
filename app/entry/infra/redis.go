@@ -28,7 +28,7 @@ func logger() *log.Logger {
 //
 // ⚠️ 关于「entry 直连 Redis」的边界说明（AGENTS.md 契约内例外）：
 // 「entry 不直接访问存储」约束针对 gorm/minio/oss 等业务存储；JWT 吊销黑名单属认证
-// 基础设施，旧 gateway 中间件即有直连 Redis 先例，故此处复用 pkg/cache.NewRedisCache
+// 基础设施，认证域本就允许直连 Redis，故此处复用 pkg/cache.NewRedisCache
 // + pkg/jwt.NewBlackList。除此之外 entry 不建立任何其他 Redis 使用面。
 //
 // 降级策略（以 pkg/jwt.NewBlackList 实际行为为准）：

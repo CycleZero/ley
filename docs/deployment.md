@@ -9,7 +9,7 @@
                   │
     ┌─────────────┼─────────────┐
     │             │             │
- Nginx/Caddy   前端(Nuxt)    后端(Gateway)
+ Nginx/Caddy   前端(Nuxt)    后端(Entry)
  (:443)       (:3000)       (:8000)
                               │
                     ┌────────┴────────┐
@@ -213,7 +213,6 @@ docker exec -i ley-postgres psql -U ley -d ley < schema.sql
 ```bash
 # data/auth/configs/config.yaml
 # data/blog/configs/config.yaml
-# data/gateway/configs/config.yaml
 # data/entry/configs/config.yaml        # entry 引导配置（复制自 configs/entry.yaml）
 ```
 
@@ -221,7 +220,7 @@ docker exec -i ley-postgres psql -U ley -d ley < schema.sql
 
 1. **数据库密码**：`data.auth.configs.config.yaml` 和 `data.blog.configs.config.yaml` 中的 `password: ley123` → 你的强密码
 2. **Redis 密码**：加上 `password: "你的强密码"`
-3. **JWT Secret**：`jwt.secret` 和 `gateway.middlewares.jwt.signingKey` 必须改为** 256 位随机字符串**
+3. **JWT Secret**：`jwt.secret` 必须改为** 256 位随机字符串**（entry 与 auth 必须完全一致）
 4. **日志级别**：`log.level: Info`（生产环境不要开 Debug）
 5. **MinIO 密码**：`data/blog/configs/config.yaml` 中的 `access_key_secret`
 6. **CORS**：把 `allowOrigins: ["*"]` 改成你的域名：`allowOrigins: ["https://yourdomain.com"]`
@@ -239,15 +238,10 @@ cd ~/ley
 make docker-build
 
 # 或者单独构建
-docker build -f app/gateway/Dockerfile -t ley-gateway:latest .
 docker build -f app/auth/Dockerfile --build-arg GOPROXY=https://goproxy.cn,direct --build-arg SERVICE_NAME=auth -t ley-auth:latest .
 docker build -f app/blog/Dockerfile --build-arg GOPROXY=https://goproxy.cn,direct --build-arg SERVICE_NAME=blog -t ley-blog:latest .
 docker build -f app/entry/Dockerfile --build-arg GOPROXY=https://goproxy.cn,direct -t ley-entry:latest .
 ```
-
-> **⚠️ Entry 与 Gateway 端口共存（T13 阶段）**：两者均默认监听 `:8000`。
-> 共存部署时先把 `data/entry/configs/config.yaml` 的 `server.http.addr` 改为 `0.0.0.0:8003`
-> （`:8001`/`:8002` 已被 auth/blog HTTP 占用）。T14 切换后移除 gateway、entry 恢复 `:8000`。
 
 **修改现有 `docker-compose.yml` 适配生产：**
 
@@ -255,12 +249,12 @@ docker build -f app/entry/Dockerfile --build-arg GOPROXY=https://goproxy.cn,dire
 
 ```yaml
 services:
-  gateway:
+  entry:
     build:
       context: .
-      dockerfile: app/gateway/Dockerfile
-    image: ley-gateway:latest
-    container_name: ley-gateway
+      dockerfile: app/entry/Dockerfile
+    image: ley-entry:latest
+    container_name: ley-entry
     # network_mode: host  # 删除这行
     ports:
       - "127.0.0.1:8000:8000"   # 仅暴露给本机，由 Nginx 反向代理
@@ -283,7 +277,7 @@ services:
     image: ley-auth:latest
     container_name: ley-auth
     # network_mode: host
-    # Auth 不需要暴露端口，Gateway 通过 Docker 内部网络访问
+    # Auth 不需要暴露端口，Entry 通过 Docker 内部网络访问
     volumes:
       - ./data:/app/data
     environment:
@@ -334,10 +328,9 @@ minio:
 docker compose up -d
 
 # 查看日志
-docker compose logs -f gateway
+docker compose logs -f entry
 docker compose logs -f auth
 docker compose logs -f blog
-docker compose logs -f entry   # entry 需先在 data/entry/configs/config.yaml 改 8003 端口并加入 compose 服务列表
 ```
 
 ### 4.4 验证后端健康
@@ -408,7 +401,7 @@ scp -r frontend-dist/* user@server:/var/www/ley/
 sudo systemctl reload nginx
 ```
 
-> **API 地址说明**：SPA 通过同源 `/api/v1` 访问 Gateway（见 vite.config.ts 代理与 Nginx `/api/` 反代）；如需 Web-API 基址注入，请在构建时提供 `VITE_API_BASE` 环境变量（可选，默认同源）。
+> **API 地址说明**：SPA 通过同源 `/api/v1` 访问 Entry（见 vite.config.ts 代理与 Nginx `/api/` 反代）；如需 Web-API 基址注入，请在构建时提供 `VITE_API_BASE` 环境变量（可选，默认同源）。
 
 ### 5.3 Docker 部署前端（可选）
 
@@ -452,7 +445,7 @@ yourdomain.com {
     # 前端 Nuxt
     reverse_proxy 127.0.0.1:3000
 
-    # API 直接透传给 Gateway
+    # API 直接透传给 Entry
     handle_path /api/* {
         reverse_proxy 127.0.0.1:8000
     }
@@ -520,7 +513,7 @@ server {
         proxy_cache_bypass $http_upgrade;
     }
 
-    # API Gateway
+    # API Entry
     location /api/ {
         proxy_pass http://127.0.0.1:8000;
         proxy_http_version 1.1;
@@ -681,12 +674,12 @@ services:
       - minio
       - nats
 
-  gateway:
+  entry:
     build:
       context: .
-      dockerfile: app/gateway/Dockerfile
-    image: ley-gateway:latest
-    container_name: ley-gateway
+      dockerfile: app/entry/Dockerfile
+    image: ley-entry:latest
+    container_name: ley-entry
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
@@ -745,7 +738,7 @@ sudo docker compose up -d
 
 ## 十、常见问题
 
-### Q1: Gateway 无法连接 Auth/Blog
+### Q1: Entry 无法连接 Auth/Blog
 
 检查 etcd 是否注册成功：
 ```bash
@@ -755,7 +748,7 @@ docker exec -it ley-etcd etcdctl get --prefix ley
 
 ### Q2: 前端调用 API 报 CORS 错误
 
-检查 `gateway/configs/config.yaml` 中的 `allowOrigins` 是否包含你的前端域名。
+检查 `entry/configs/config.yaml` 中的 `allowOrigins` 是否包含你的前端域名。
 
 ### Q3: 上传图片失败
 

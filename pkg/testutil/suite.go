@@ -38,7 +38,7 @@ import (
 // Suite 公共集成测试套件。
 // 每个微服务的集成测试通过 NewSuite 创建，共享 HTTP 客户端和 etcd gRPC 连接。
 type Suite struct {
-	// GatewayURL 网关 HTTP 地址，从环境变量 GATEWAY_URL 读取
+	// GatewayURL 入口服务（entry）HTTP 地址，从环境变量 GATEWAY_URL 读取
 	GatewayURL string
 	// EtcdAddrs etcd 地址列表，从环境变量 ETCD_ADDR 读取（逗号分隔）
 	EtcdAddrs []string

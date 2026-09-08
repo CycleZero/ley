@@ -5,7 +5,7 @@
 
 ## 概述
 
-Ley 是一个个人博客平台，采用 Go/Kratos 微服务单体仓库 + React 19 SPA 前端（`web/`）。Gateway 作为 HTTP 入口网关，gRPC 转发到 Auth（认证）和 Blog（博客）服务。
+Ley 是一个个人博客平台，采用 Go/Kratos 微服务单体仓库 + React 19 SPA 前端（`web/`）。Entry 作为统一 HTTP 入口，gRPC 转发到 Auth（认证）和 Blog（博客）服务。
 
 ## 结构
 
@@ -15,12 +15,10 @@ ley/
 │   ├── auth/v1/            # 认证服务 API
 │   ├── blog/v1/            # 博客服务 API
 │   ├── common/v1/          # 共享类型（TokenPair, UserInfo, AuthorInfo）
-│   └── gateway/            # 网关中间件 Proto 配置
 ├── app/
 │   ├── auth/               # 认证服务 — 标准 Kratos DDD（见下方分层）
 │   ├── blog/               # 博客服务 — 标准 Kratos DDD（见下方分层）
-│   ├── entry/              # 入口服务（规划中）— 非 Kratos 微服务（见「Entry 入口服务特别说明」）
-│   └── gateway/            # 旧 API 网关 — 非 DDD 结构（规划替换为 entry，见 gateway/AGENTS.md）
+│   └── entry/              # 统一入口 — 非 Kratos 微服务（见「Entry 入口服务特别说明」）
 ├── web/                # React 19 SPA 前端（Vite 8，2026-07 由 Nuxt 4 重构而来）
 │   └── src/
 │       ├── pages/          # 页面（前台 + /admin 后台）
@@ -69,8 +67,8 @@ ley/
 | 文章 CRUD | `app/blog/internal/biz/article.go` | 最大文件，核心业务逻辑 |
 | 标签/分类 | `app/blog/internal/biz/tag.go` | 树形分类，循环引用检测 |
 | 文件上传 | `app/blog/internal/biz/file.go` | MinIO 直传、MIME 校验 |
-| 网关路由/中间件 | `app/gateway/proxy/`、`app/gateway/middleware/` | JWT/CORS/限流/熔断/链路追踪 |
-| 入口服务（规划中） | `app/entry/` | Gin 统一入口：JWT 鉴权/信封/转发（见 Entry 特别说明） |
+| 入口路由/中间件 | `app/entry/internal/router/`、`app/entry/internal/domain/proxy/` | JWT/CORS/限流/链路/指标/转发 |
+| 入口服务 | `app/entry/` | Gin 统一入口：JWT 鉴权/信封/转发（见 Entry 特别说明） |
 | 用户上下文传递 | `pkg/meta/` | `x-md-global-` 前缀，handler/服务间统一 |
 | 前端 API 客户端 | `web/src/lib/api-client.ts` | ofetch：Token 注入、401 单飞刷新、`{code,msg,data}` 解包 |
 | 前端数据获取 | `web/src/hooks/use-*.ts` | TanStack Query（tags/categories staleTime 60s） |
@@ -100,11 +98,9 @@ app/{service}/
 依赖方向: cmd → service → biz ← data
 ```
 
-**Gateway 不遵循此分层** — 它是上游 go-kratos/gateway 的嵌入，结构完全不同。参见 `app/gateway/AGENTS.md`。
-
 ## Entry 入口服务特别说明（⚠️ 与微服务区分）
 
-> **`app/entry/` 不是 Kratos 微服务，不是标准 DDD 四层结构**——请勿用 auth/blog 的分层方式套用它，也勿在它上面照搬微服务规范。它是**基于 Gin 的轻量统一入口（API Edge / BFF 形态）**，定位与 gate 门禁替代旧 gateway。
+> **`app/entry/` 不是 Kratos 微服务，不是标准 DDD 四层结构**——请勿用 auth/blog 的分层方式套用它，也勿在它上面照搬微服务规范。它是**基于 Gin 的轻量统一入口（API Edge / BFF 形态）**，已替代旧 gateway 成为唯一 HTTP 入口。
 
 ### 与 Kratos 微服务的本质区别
 
@@ -257,11 +253,10 @@ ctx = pkg/meta.NewClientCtx(ctx, meta)
 
 ```bash
 # === 构建 ===
-make build              # 构建 auth + blog 到 bin/
+make build              # 构建 auth + blog + entry 到 bin/
 make build-auth          # 仅构建 auth
 make build-blog          # 仅构建 blog
-make build-gateway       # 构建 gateway（独立目录）
-make build-all           # 构建全部（含 gateway）
+make build-all           # 构建全部（auth + blog + entry）
 make rebuild             # proto + wire + build 完整重建
 
 # === Proto 生成 ===
@@ -269,7 +264,7 @@ make api                 # api/ proto → pb.go + http + grpc + openapi
 make config              # conf/ + app/**/conf/ → 配置 proto 代码
 make internal_proto      # app/ 内部 proto
 make wire                # Wire 依赖注入代码生成
-make wire-all            # 含 gateway
+make wire-all            # 所有服务 Wire 生成
 
 # === 测试 ===
 make test-unit           # 单元测试（data 层集成测试已用 //go:build integration 隔离，连库需 LEY_TEST_MYSQL_DSN + make test-integration）
@@ -296,6 +291,5 @@ cd ley-web && pnpm lint      # oxlint
 - **基础镜像依赖**：Docker 构建前必须运行 `./build-deploy-image.sh` 构建 `ley-builder:v1` 和 `ley-runtime:v1`，或从 GHCR 拉取
 - **docker-compose 无基础设施**：不含 MySQL/Redis/etcd/MinIO 容器，需单独部署；数据库为 MySQL（configs/ 模板已对齐）
 - **Host 网络模式**：docker-compose 使用 `network_mode: host`，无端口映射，不能多实例
-- **Gateway proto**：api/gateway 由根 `make api` 统一生成（`app/gateway/Makefile` 已失效：`find api` 指向不存在的目录）
 - **中国镜像**：Go 代理 `goproxy.cn`，Debian 源 `mirrors.ustc.edu.cn`，非中国网络需调整
 - **空目录 pkg/dtm/**：遗留空目录，建议清理
