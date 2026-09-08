@@ -148,7 +148,7 @@ func TestUserRepo_FindNotFound(t *testing.T) {
 	}
 }
 
-func TestUserRepo_Update(t *testing.T) {
+func TestUserRepo_UpdateProfile(t *testing.T) {
 	repo, _ := newTestRepo(t)
 	ctx := context.Background()
 
@@ -158,14 +158,12 @@ func TestUserRepo_Update(t *testing.T) {
 	}
 	defer cleanupUser(t, repo, u.ID)
 
-	u.Avatar = "https://avatar.example.com/a.png"
-	u.Bio = "新的简介"
-	if err := repo.Update(ctx, u); err != nil {
-		t.Fatalf("Update 失败: %v", err)
+	if err := repo.UpdateProfile(ctx, u.ID, "https://avatar.example.com/a.png", "新的简介"); err != nil {
+		t.Fatalf("UpdateProfile 失败: %v", err)
 	}
 
 	got, _ := repo.FindByID(ctx, u.ID)
-	if got.Avatar != u.Avatar || got.Bio != u.Bio {
+	if got.Avatar != "https://avatar.example.com/a.png" || got.Bio != "新的简介" {
 		t.Errorf("资料未更新: %+v", got)
 	}
 }

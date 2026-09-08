@@ -98,49 +98,44 @@ func (r *userRepo) Create(ctx context.Context, user *biz.User) error {
 }
 
 // =============================================================================
-// Update — 更新用户（使用 map 避免 GORM 零值跳过）
+// UpdateProfile — 仅更新资料字段（avatar/bio）
 //
-// GORM 的 struct Updates 会跳过零值字段（如空字符串 ""），
-// 因此使用 map[string]interface{} 确保零值字段也能被更新。
+// 使用 map 仅写 avatar/bio（GORM struct Updates 会跳过零值，map 不会），
+// 且不触碰 status/role/password 等字段——避免把加载快照中的旧值回写，
+// 覆盖并发发生的状态变更（如禁用账号借资料更新复活）。
 // 更新成功后立即删除缓存，使下次查询从 DB 重新加载。
 // =============================================================================
 
-func (r *userRepo) Update(ctx context.Context, user *biz.User) error {
-	ctx, span := r.data.StartSpan(ctx, "UserRepo.Update")
+func (r *userRepo) UpdateProfile(ctx context.Context, id uint, avatar, bio string) error {
+	ctx, span := r.data.StartSpan(ctx, "UserRepo.UpdateProfile")
 	defer span.End()
 
-	span.SetAttributes(attribute.Int("user.id", int(user.ID)))
-	r.data.logger.WithContext(ctx).Debugf("[UserRepo.Update] 开始 id=%d username=%s", user.ID, user.Username)
+	span.SetAttributes(attribute.Int("user.id", int(id)))
+	r.data.logger.WithContext(ctx).Debugf("[UserRepo.UpdateProfile] 开始 id=%d", id)
 
-	// 使用 map 执行部分更新，避免 GORM 零值跳过问题
 	result := r.data.db.WithContext(ctx).
 		Model(&UserPO{}).
-		Where("id = ?", user.ID).
+		Where("id = ?", id).
 		Updates(map[string]interface{}{
-			"username": user.Username,
-			"email":    user.Email,
-			"password": user.Password,
-			"avatar":   user.Avatar,
-			"bio":      user.Bio,
-			"status":   int8(user.Status),
-			"role":     string(user.Role),
+			"avatar": avatar,
+			"bio":    bio,
 		})
 
 	if result.Error != nil {
-		r.data.logger.WithContext(ctx).Errorf("[UserRepo.Update] 更新失败 id=%d err=%v", user.ID, result.Error)
-		return fmt.Errorf("update user: %w", result.Error)
+		r.data.logger.WithContext(ctx).Errorf("[UserRepo.UpdateProfile] 更新失败 id=%d err=%v", id, result.Error)
+		return fmt.Errorf("update user profile: %w", result.Error)
 	}
 
 	// RowsAffected = 0 表示目标行不存在（可能已被软删除）
 	if result.RowsAffected == 0 {
-		r.data.logger.WithContext(ctx).Warnf("[UserRepo.Update] 目标不存在 id=%d", user.ID)
+		r.data.logger.WithContext(ctx).Warnf("[UserRepo.UpdateProfile] 目标不存在 id=%d", id)
 		return biz.ErrUserNotFound
 	}
 
 	// 删除缓存，下次查询回源 DB
-	r.deleteCache(ctx, user.ID)
+	r.deleteCache(ctx, id)
 
-	r.data.logger.WithContext(ctx).Infof("[UserRepo.Update] 更新成功 id=%d", user.ID)
+	r.data.logger.WithContext(ctx).Infof("[UserRepo.UpdateProfile] 更新成功 id=%d", id)
 	return nil
 }
 
