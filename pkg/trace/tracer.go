@@ -2,8 +2,10 @@ package trace
 
 import (
 	"context"
+	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 
 	"go.opentelemetry.io/otel"
@@ -22,7 +24,7 @@ const tracerName = "ley/otel"
 // （OTEL_EXPORTER_OTLP_TRACES_ENDPOINT / OTEL_EXPORTER_OTLP_ENDPOINT），
 // 保证与任意 OTel 兼容后端（Jaeger/Tempo/OTLP Collector）对接。
 type Config struct {
-	Endpoint       string  // OTLP HTTP 端点（host:port，不含 scheme）
+	Endpoint       string  // OTLP HTTP 端点：host:port 或 http(s)://host:port（自动剥离 scheme）
 	ServiceName    string  // 服务名（写入 resource.service.name）
 	ServiceVersion string  // 服务版本（写入 resource.service.version）
 	Environment    string  // 部署环境（写入 resource.deployment.environment）
@@ -61,10 +63,13 @@ var globalProvider *Provider
 // Init 初始化全局链路追踪：OTLP/HTTP 上报 + W3C 上下文传播 + 资源属性。
 // 幂等性由调用方保证（进程启动时调用一次）。
 func Init(cfg Config) (*Provider, error) {
-	exporterOpts := make([]otlptracehttp.Option, 0, 2)
-	if cfg.Endpoint != "" {
-		exporterOpts = append(exporterOpts, otlptracehttp.WithEndpoint(cfg.Endpoint))
-		if cfg.Insecure {
+	exporterOpts := make([]otlptracehttp.Option, 0, 3)
+	if endpoint, path, insecure := normalizeEndpoint(cfg.Endpoint, cfg.Insecure); endpoint != "" {
+		exporterOpts = append(exporterOpts, otlptracehttp.WithEndpoint(endpoint))
+		if path != "" {
+			exporterOpts = append(exporterOpts, otlptracehttp.WithURLPath(path))
+		}
+		if insecure {
 			exporterOpts = append(exporterOpts, otlptracehttp.WithInsecure())
 		}
 	}
@@ -97,6 +102,44 @@ func Init(cfg Config) (*Provider, error) {
 	p := &Provider{tp: tp}
 	globalProvider = p
 	return p, nil
+}
+
+// normalizeEndpoint 规范化 OTLP/HTTP 端点，兼容带 scheme 的配置写法。
+// 返回 host:port、URL 路径（与 exporter 默认 /v1/traces 相同时为空）以及是否使用明文传输。
+//
+// 背景：trace.endpoint 历史上被写成 "http://127.0.0.1:4318"，而
+// otlptracehttp.WithEndpoint 只接受 host:port，会二次拼接协议头，
+// 生成 "http://http:%2F%2F127.0.0.1:4318/v1/traces" 这类畸形 URL。
+// 规则：
+//   - 空值：返回空端点，交由 OTel 环境变量兜底；
+//   - 无 scheme：按 host:port 处理，沿用调用方 insecure；
+//   - http:// ：剥离 scheme 并强制明文；
+//   - https://：剥离 scheme 并强制 TLS（忽略调用方 insecure）。
+func normalizeEndpoint(raw string, insecure bool) (endpoint, path string, useInsecure bool) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", "", insecure
+	}
+	if !strings.Contains(trimmed, "://") {
+		return trimmed, "", insecure
+	}
+	u, err := url.Parse(trimmed)
+	if err != nil || u.Host == "" {
+		// 解析失败时退化为裸剥离 scheme，保证进程仍能启动（由 exporter 上报错误）
+		fallback := strings.TrimPrefix(strings.TrimPrefix(trimmed, "https://"), "http://")
+		return fallback, "", insecure
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "https":
+		insecure = false
+	case "http":
+		insecure = true
+	}
+	p := strings.TrimSuffix(u.Path, "/")
+	if p == "/v1/traces" {
+		p = "" // exporter 默认路径，无需重复设置
+	}
+	return u.Host, p, insecure
 }
 
 // resourceAttributes 组装资源属性（仅在字段非空时写入，避免空值污染）。
