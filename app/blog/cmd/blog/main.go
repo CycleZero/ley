@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"flag"
 
 	"github.com/CycleZero/ley/app/blog/internal/conf"
 	commonconf "github.com/CycleZero/ley/conf"
 	"github.com/CycleZero/ley/pkg/infra"
 	locallog "github.com/CycleZero/ley/pkg/log"
+	"github.com/CycleZero/ley/pkg/metrics"
 	"github.com/CycleZero/ley/pkg/trace"
 	"github.com/CycleZero/ley/pkg/util"
 
@@ -38,7 +40,7 @@ func init() {
 
 func newApp(logger log.Logger, gs *grpc.Server, hs *http.Server, rr registry.Registrar) *kratos.App {
 	return kratos.New(
-		kratos.ID(id), 		kratos.Name(util.DisServiceName(Name)), kratos.Version(Version),
+		kratos.ID(id), kratos.Name(util.DisServiceName(Name)), kratos.Version(Version),
 		kratos.Metadata(map[string]string{}), kratos.Logger(logger),
 		kratos.Server(gs, hs), kratos.Registrar(rr),
 	)
@@ -78,6 +80,10 @@ func main() {
 	if bc.Etcd == nil || len(bc.Etcd.Endpoints) == 0 {
 		panic("config error: etcd.endpoints is required in bootstrap config")
 	}
+	// 初始化可观测指标（Prometheus /metrics，OTel 兼容；与追踪共用 MeterProvider）
+	if _, err := metrics.New(util.DisServiceName(conf.ServiceName)); err != nil {
+		logger.Log(log.LevelError, "init metrics error", err)
+	}
 	etcdClient := infra.NewEtcdClient(bc.Etcd.Endpoints)
 	defer etcdClient.Close()
 
@@ -95,8 +101,16 @@ func main() {
 		panic(err)
 	}
 
+	// 初始化链路追踪（OTLP/HTTP + W3C 上下文传播；退出时刷出缓冲 span）
 	if bc.Trace != nil && bc.Trace.Endpoint != "" {
-		_ = trace.InitTracer(bc.Trace.Endpoint, util.DisServiceName(conf.ServiceName))
+		if _, err = trace.Init(trace.Config{
+			Endpoint:    bc.Trace.Endpoint,
+			ServiceName: util.DisServiceName(conf.ServiceName),
+			Insecure:    true,
+		}); err != nil {
+			logger.Log(log.LevelError, "init tracer error", err)
+		}
+		defer func() { _ = trace.Shutdown(context.Background()) }()
 	}
 
 	app, cleanup, err := wireApp(&bc, &serviceConf, bc.Server, serviceConf.Data, logger, etcdClient)
