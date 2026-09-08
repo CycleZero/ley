@@ -49,17 +49,26 @@ func main() {
 		logLevel = bc.Log.Level.String()
 		logPath = bc.Log.Path
 	}
-	l, err := locallog.NewLogger(logMode, logLevel, logPath, Name)
+	// OTLP 端点统一取自引导配置 trace.endpoint（trace/metrics/logs 共用）
+	traceEndpoint := ""
+	if bc.Trace != nil {
+		traceEndpoint = bc.Trace.Endpoint
+	}
+	l, err := locallog.NewLogger(logMode, logLevel, logPath, Name, locallog.WithOTLP(util.DisServiceName(Name), traceEndpoint))
 	if err != nil {
 		panic(fmt.Sprintf("初始化日志失败：%v", err))
 	}
 	locallog.SetGlobalLogger(l)
+	defer func() { _ = locallog.ShutdownOTLP(context.Background()) }()
 	logger := locallog.GetLogger()
 	logger.Info("日志初始化成功", zap.String("service", Name))
 
-	// 3. 初始化可观测指标（Prometheus /metrics，OTel 兼容）
-	if _, err := metrics.New(util.DisServiceName(Name)); err != nil {
-		logger.Error("初始化指标失败", zap.Error(err))
+	// 3. 初始化可观测指标（Prometheus /metrics + OTLP 推送；与追踪共用端点）
+	metricsProvider, metricsErr := metrics.New(util.DisServiceName(Name), metrics.WithOTLPEndpoint(traceEndpoint))
+	if metricsErr != nil {
+		logger.Error("初始化指标失败", zap.Error(metricsErr))
+	} else {
+		defer func() { _ = metricsProvider.Shutdown(context.Background()) }()
 	}
 
 	// 4. 初始化链路追踪（OTLP/HTTP + W3C 传播；退出时刷出缓冲 span）

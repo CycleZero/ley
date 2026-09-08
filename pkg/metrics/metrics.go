@@ -4,13 +4,17 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
+	"time"
 
+	"github.com/CycleZero/ley/pkg/otelx"
 	"github.com/go-kratos/kratos/v2/middleware"
 	kmetrics "github.com/go-kratos/kratos/v2/middleware/metrics"
 	prom "github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	otelprom "go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -34,9 +38,28 @@ type Provider struct {
 	shutdownErr  error
 }
 
+// options 指标 Provider 的可选配置。
+type options struct {
+	otlpEndpoint string
+}
+
+// Option 指标 Provider 配置项。
+type Option func(*options)
+
+// WithOTLPEndpoint 启用 OTLP/HTTP 指标上报（与 /metrics 抓取并存）。
+// endpoint 支持 host:port 或 http(s)://host:port；为空时仅暴露 Prometheus。
+func WithOTLPEndpoint(endpoint string) Option {
+	return func(o *options) { o.otlpEndpoint = endpoint }
+}
+
 // New 创建指标 Provider：注册 Prometheus exporter、构建 MeterProvider 并设为全局，
 // 使 OTel 原生插桩（Kratos metrics 中间件、otelgrpc 等）自动生效。
-func New(serviceName string) (*Provider, error) {
+func New(serviceName string, opts ...Option) (*Provider, error) {
+	o := options{}
+	for _, opt := range opts {
+		opt(&o)
+	}
+
 	registry := prom.NewRegistry()
 	exporter, err := otelprom.New(otelprom.WithRegisterer(registry))
 	if err != nil {
@@ -53,10 +76,18 @@ func New(serviceName string) (*Provider, error) {
 		res = resource.NewSchemaless(semconv.ServiceNameKey.String(serviceName))
 	}
 
-	mp := sdkmetric.NewMeterProvider(
-		sdkmetric.WithResource(res),
-		sdkmetric.WithReader(exporter),
-	)
+	// Prometheus 抓取与 OTLP 推送并存：本地 /metrics 便于排障，
+	// 远程 OTLP 让生产环境无需额外采集器即可把指标送进可观测后端。
+	readerOpts := []sdkmetric.Option{sdkmetric.WithReader(exporter)}
+	if strings.TrimSpace(o.otlpEndpoint) != "" {
+		otlpReader, err := newOTLPReader(o.otlpEndpoint)
+		if err != nil {
+			return nil, err
+		}
+		readerOpts = append(readerOpts, sdkmetric.WithReader(otlpReader))
+	}
+
+	mp := sdkmetric.NewMeterProvider(append([]sdkmetric.Option{sdkmetric.WithResource(res)}, readerOpts...)...)
 	otel.SetMeterProvider(mp)
 
 	p := &Provider{
@@ -157,4 +188,21 @@ func (p *Provider) KratosClientMiddleware() (middleware.Middleware, error) {
 		return nil, fmt.Errorf("创建客户端耗时直方图失败：%w", err)
 	}
 	return kmetrics.Client(kmetrics.WithRequests(requests), kmetrics.WithSeconds(seconds)), nil
+}
+
+// newOTLPReader 创建 OTLP/HTTP 指标导出器（15s 周期上报，进程退出时由 Provider.Shutdown 刷出）。
+func newOTLPReader(raw string) (sdkmetric.Reader, error) {
+	endpoint, path, insecure := otelx.ParseEndpoint(raw, true, "/v1/metrics")
+	opts := []otlpmetrichttp.Option{otlpmetrichttp.WithEndpoint(endpoint)}
+	if path != "" {
+		opts = append(opts, otlpmetrichttp.WithURLPath(path))
+	}
+	if insecure {
+		opts = append(opts, otlpmetrichttp.WithInsecure())
+	}
+	exp, err := otlpmetrichttp.New(context.Background(), opts...)
+	if err != nil {
+		return nil, fmt.Errorf("创建 OTLP 指标导出器失败：%w", err)
+	}
+	return sdkmetric.NewPeriodicReader(exp, sdkmetric.WithInterval(15*time.Second)), nil
 }

@@ -22,6 +22,7 @@ services:
       - ./data:/app/data
     environment:
       - TZ=Asia/Shanghai
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=production
     restart: unless-stopped
 
   # ================================
@@ -35,6 +36,7 @@ services:
       - ./data:/app/data
     environment:
       - TZ=Asia/Shanghai
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=production
     restart: unless-stopped
 
   # ================================
@@ -50,6 +52,7 @@ services:
       - ./data:/app/data
     environment:
       - TZ=Asia/Shanghai
+      - OTEL_RESOURCE_ATTRIBUTES=deployment.environment=production
     restart: unless-stopped
     depends_on:
       - auth

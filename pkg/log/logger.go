@@ -46,6 +46,22 @@ type Logger struct {
 	*zap.Logger
 }
 
+// Option NewLogger 的可选配置。
+type Option func(*loggerOptions)
+
+type loggerOptions struct {
+	otlpServiceName string
+	otlpEndpoint    string
+}
+
+// WithOTLP 启用 OTLP 日志上报（serviceName 写入 resource.service.name；endpoint 为空时忽略）。
+func WithOTLP(serviceName, endpoint string) Option {
+	return func(o *loggerOptions) {
+		o.otlpServiceName = serviceName
+		o.otlpEndpoint = endpoint
+	}
+}
+
 var globalLogger *Logger
 
 func NewLogger(
@@ -53,7 +69,12 @@ func NewLogger(
 	level string,
 	logDir string,
 	appName string,
+	opts ...Option,
 ) (*Logger, error) {
+	var o loggerOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
 	logPath := GetLogPath(logDir, appName)
 
 	// 创建日志目录
@@ -150,6 +171,15 @@ func NewLogger(
 	cores = append(cores, zapcore.NewCore(consoleEncoder, consoleWriterSyncer, zLevel))
 	if logPath != "" && fileWriteSyncer != nil {
 		cores = append(cores, zapcore.NewCore(fileEncoder, fileWriteSyncer, zLevel))
+	}
+	if o.otlpEndpoint != "" {
+		otlpCore, err := newOTLPLogCore(o.otlpServiceName, o.otlpEndpoint, zLevel)
+		if err != nil {
+			// OTLP 上报失败不阻断启动，本地日志（控制台/文件）继续可用
+			fmt.Fprintf(os.Stderr, "初始化 OTLP 日志导出失败，降级为本地日志：%v\n", err)
+		} else if otlpCore != nil {
+			cores = append(cores, otlpCore)
+		}
 	}
 
 	core := zapcore.NewTee(cores...)

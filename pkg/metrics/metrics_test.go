@@ -92,3 +92,21 @@ func TestProviderShutdownIdempotent(t *testing.T) {
 		t.Fatalf("重复 Shutdown 应无错误，实际：%v", err)
 	}
 }
+
+// 场景 S4：配置 OTLP 端点后仍保留 Prometheus 抓取能力（双出口并存）。
+func TestProviderWithOTLPEndpointKeepsPrometheus(t *testing.T) {
+	p, err := New("test-service", WithOTLPEndpoint("http://127.0.0.1:4318"))
+	if err != nil {
+		t.Fatalf("带 OTLP 端点创建 Provider 失败：%v", err)
+	}
+	defer func() { _ = p.Shutdown(context.Background()) }()
+
+	counter, err := p.Int64Counter("otlp_demo_total", "双出口演示")
+	if err != nil {
+		t.Fatalf("创建计数器失败：%v", err)
+	}
+	counter.Add(context.Background(), 1)
+	if body := scrape(t, p); !strings.Contains(body, "otlp_demo_total") {
+		t.Fatalf("/metrics 未暴露计数器，实际：%s", body)
+	}
+}

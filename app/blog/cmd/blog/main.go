@@ -66,11 +66,17 @@ func main() {
 		logLevel = bc.Log.Level.String()
 		logPath = bc.Log.Path
 	}
-	l, err := locallog.NewLogger(logMode, logLevel, logPath, Name)
+	// OTLP 端点统一取自引导配置 trace.endpoint（trace/metrics/logs 共用）
+	traceEndpoint := ""
+	if bc.Trace != nil {
+		traceEndpoint = bc.Trace.Endpoint
+	}
+	l, err := locallog.NewLogger(logMode, logLevel, logPath, Name, locallog.WithOTLP(util.DisServiceName(conf.ServiceName), traceEndpoint))
 	if err != nil {
 		panic(err)
 	}
 	locallog.SetGlobalLogger(l)
+	defer func() { _ = locallog.ShutdownOTLP(context.Background()) }()
 	logger := log.With(locallog.GetKratosLogger(),
 		"ts", log.DefaultTimestamp, "caller", log.DefaultCaller,
 		"service.id", id, "service.name", Name, "service.version", Version,
@@ -80,9 +86,12 @@ func main() {
 	if bc.Etcd == nil || len(bc.Etcd.Endpoints) == 0 {
 		panic("config error: etcd.endpoints is required in bootstrap config")
 	}
-	// 初始化可观测指标（Prometheus /metrics，OTel 兼容；与追踪共用 MeterProvider）
-	if _, err := metrics.New(util.DisServiceName(conf.ServiceName)); err != nil {
-		logger.Log(log.LevelError, "init metrics error", err)
+	// 初始化可观测指标（Prometheus /metrics + OTLP 推送；与追踪共用端点）
+	metricsProvider, metricsErr := metrics.New(util.DisServiceName(conf.ServiceName), metrics.WithOTLPEndpoint(traceEndpoint))
+	if metricsErr != nil {
+		logger.Log(log.LevelError, "init metrics error", metricsErr)
+	} else {
+		defer func() { _ = metricsProvider.Shutdown(context.Background()) }()
 	}
 	etcdClient := infra.NewEtcdClient(bc.Etcd.Endpoints)
 	defer etcdClient.Close()
