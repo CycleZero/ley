@@ -7,6 +7,7 @@ import (
 	"github.com/CycleZero/ley/app/entry/internal/common"
 	"github.com/CycleZero/ley/app/entry/internal/domain/proxy"
 	"github.com/CycleZero/ley/app/entry/internal/router/middleware"
+	"github.com/CycleZero/ley/pkg/metrics"
 	"github.com/gin-gonic/gin"
 )
 
@@ -61,6 +62,11 @@ func RegisterRouter(root *gin.Engine, serviceHub *proxy.ServiceHub) {
 		common.OK(c, nil)
 	})
 
+	// Prometheus 指标抓取端点（metrics 未初始化时返回 404，保证单测/早期启动可用）
+	if handler := metrics.DefaultHandler(); handler != nil {
+		root.GET("/metrics", gin.WrapH(handler))
+	}
+
 	// 未匹配路由 → 404 信封
 	root.NoRoute(func(c *gin.Context) {
 		common.JSON(c, http.StatusNotFound, http.StatusNotFound, "接口不存在", nil)
@@ -78,6 +84,7 @@ func RegisterRouter(root *gin.Engine, serviceHub *proxy.ServiceHub) {
 //	PUBLIC        → 可选认证（无 token 放行，有 token 注入身份）
 //	AUTH          → 强制认证（缺失/无效 token 一律 401）
 //	AUTHOR_OR_ADMIN / ADMIN → 强制认证 + 角色白名单（403 拦截越权）
+//
 // toGinPath 将路由表的 {param} 花括号参数转换为 gin 的 :param 语法
 func toGinPath(path string) string {
 	var b strings.Builder

@@ -42,7 +42,7 @@ func RequestLogger() gin.HandlerFunc {
 			path += "?" + rawQuery
 		}
 		// 开始行走 Debug：默认关闭的细节日志，避免正常流量刷屏
-		mwLogger().Debug("HTTP 请求开始",
+		ctxLogger(c).Debug("HTTP 请求开始",
 			zap.String("method", c.Request.Method),
 			zap.String("path", path),
 			zap.String("ip", c.ClientIP()),
@@ -68,12 +68,18 @@ func RequestLogger() gin.HandlerFunc {
 		switch {
 		case status >= 500:
 			// 仅真故障刷 Error（热路径纪律）
-			mwLogger().Error("HTTP 请求处理失败", fields...)
+			ctxLogger(c).Error("HTTP 请求处理失败", fields...)
 		case status >= 400:
 			// 4xx：客户端问题或业务拒绝，Warn 即可
-			mwLogger().Warn("HTTP 请求被拒绝", fields...)
+			ctxLogger(c).Warn("HTTP 请求被拒绝", fields...)
 		default:
-			mwLogger().Info("HTTP 请求完成", fields...)
+			ctxLogger(c).Info("HTTP 请求完成", fields...)
 		}
 	}
+}
+
+// ctxLogger 返回绑定当前请求上下文的日志器（自动注入 trace_id/span_id/user_id/role）。
+// 全局日志器未初始化时回退为 Nop，避免单测 panic。
+func ctxLogger(c *gin.Context) *log.Logger {
+	return mwLogger().WithContext(c.Request.Context())
 }

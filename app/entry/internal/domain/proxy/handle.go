@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/CycleZero/ley/app/entry/internal/common"
 	pkgmeta "github.com/CycleZero/ley/pkg/meta"
@@ -66,13 +67,17 @@ func callProto(c *gin.Context,
 	//    匿名请求（GetRequestMeta 为 nil）时 BuildRequestMeta 仍回填真实客户端 IP。
 	ctx := pkgmeta.NewClientCtx(c.Request.Context(), common.BuildRequestMeta(c))
 
-	// 3. 调用下游 RPC
+	// 3. 调用下游 RPC：统一记录耗时、日志与业务指标（39 个 handler 共用此出口）
+	start := time.Now()
 	reply, err := invoke(ctx, req)
+	operation := string(req.ProtoReflect().Descriptor().FullName())
 	if err != nil {
 		httpStatus, code, msg := common.MapGRPCError(err)
+		recordProxyCall(ctx, operation, httpStatus, time.Since(start), err)
 		common.Fail(c, httpStatus, code, msg)
 		return
 	}
+	recordProxyCall(ctx, operation, http.StatusOK, time.Since(start), nil)
 
 	// 4. 成功：protojson 序列化 reply → snake_case（UseProtoNames，与 auth 服务
 	//    kratosjson.MarshalOptions.UseProtoNames = true 的对外契约一致），

@@ -29,6 +29,7 @@ type ServiceHub struct {
 // 见 infra/grpc.go 命名包装说明）。底层连接已挂载 kratos metadata.Client() 中间件，
 // handler 内经 pkg/meta.NewClientCtx 注入的用户上下文（x-md-global-*）会随调用透传下游。
 func NewProxyHub(authConn *infra.AuthClientConn, blogConn *infra.BlogClientConn) *ServiceHub {
+	initProxyMetrics()
 	return &ServiceHub{
 		Auth:     authv1.NewAuthServiceClient(authConn.Conn()),
 		Article:  blogv1.NewArticleServiceClient(blogConn.Conn()),

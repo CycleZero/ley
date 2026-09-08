@@ -56,6 +56,7 @@ func (r *RegisteredMiddleWire) Register() {
 	// 组装全局链；限流可选：远程配置 ratelimit.rps > 0 才启用（缺省关闭）
 	cfg := r.holder.Get()
 	chain := []gin.HandlerFunc{
+		middleware.Observability(conf.ServiceName),
 		middleware.RequestLogger(),
 		middleware.AddMetaData(),
 		middleware.CORS(cfg.CORS.AllowOrigins),

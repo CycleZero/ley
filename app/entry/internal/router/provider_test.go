@@ -27,7 +27,7 @@ const testSigningKey = "router-provider-test-secret-0123456789abcdef"
 
 // TestRegisterMountsGlobalMiddlewares 验证 RegisteredMiddleWire.Register() 的真实注册：
 //  1. 发布 JWT 认证工厂（middleware.AuthMiddleWire）；
-//  2. 按默认远程配置（rps=0 无限流）组装 3 个全局中间件；
+//  2. 按默认远程配置（rps=0 无限流）组装 4 个全局中间件（观测 + 日志 + 元数据 + CORS）；
 //  3. 对齐 app.go 的组装顺序（Recovery → Register → RegisterRouter）走完整注册路径后，
 //     全局链真实生效：健康检查带 RequestID 头与 CORS 头，404 兜底也走全局链。
 func TestRegisterMountsGlobalMiddlewares(t *testing.T) {
@@ -55,8 +55,8 @@ func TestRegisterMountsGlobalMiddlewares(t *testing.T) {
 	if middleware.AuthMiddleWire == nil {
 		t.Fatalf("Register() 应发布 middleware.AuthMiddleWire（供路由组挂载）")
 	}
-	if len(globalMiddleWires) != 3 {
-		t.Fatalf("默认配置（无限流）应组装 3 个全局中间件，实际 %d", len(globalMiddleWires))
+	if len(globalMiddleWires) != 4 {
+		t.Fatalf("默认配置（无限流）应组装 4 个全局中间件，实际 %d", len(globalMiddleWires))
 	}
 
 	// 对齐 app.go 组装顺序：Recovery → Register() → RegisterRouter(e, hub)
