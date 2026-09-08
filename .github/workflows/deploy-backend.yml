@@ -30,7 +30,7 @@ jobs:
   # =============================================================================
   # 构建后端 Docker 镜像并推送到 GitHub Container Registry (GHCR)
   #
-  # 基础镜像（ley-builder / ley-runtime）与服务镜像（ley-auth/blog/gateway/entry）
+  # 基础镜像（ley-builder / ley-runtime）与服务镜像（ley-auth/blog/entry）
   # 全部托管在 ghcr.io/cyclezero/ley/。服务器部署时从 GHCR 直接 pull
   # （无需 Harbor，也无需服务器本地构建）。
   # =============================================================================
@@ -104,7 +104,7 @@ jobs:
             ley-builder:v1=docker-image://ghcr.io/cyclezero/ley/ley-builder:latest
             ley-runtime:v1=docker-image://ghcr.io/cyclezero/ley/ley-runtime:latest
 
-      # ---------- Entry 入口服务镜像（T13 共存期随后端发布，T14 切换后接替 gateway） ----------
+      # ---------- Entry 入口服务镜像（entry 为唯一 HTTP 入口） ----------
       - name: Build and push entry
         uses: docker/build-push-action@v5
         with:
@@ -177,7 +177,7 @@ jobs:
             docker tag crpi-sys2vl4a59vmhka8-vpc.cn-hangzhou.personal.cr.aliyuncs.com/cyclezero/ley:ley-blog-${{ github.sha }} crpi-sys2vl4a59vmhka8-vpc.cn-hangzhou.personal.cr.aliyuncs.com/cyclezero/ley:ley-blog
             docker tag crpi-sys2vl4a59vmhka8-vpc.cn-hangzhou.personal.cr.aliyuncs.com/cyclezero/ley:ley-entry-${{ github.sha }} crpi-sys2vl4a59vmhka8-vpc.cn-hangzhou.personal.cr.aliyuncs.com/cyclezero/ley:ley-entry
 
-            echo '--- 重启服务（T14：entry 为唯一 HTTP 入口，gateway 已退役）---'
+            echo '--- 重启服务（T14：entry 为唯一 HTTP 入口）---'
             docker-compose -f /projects/ley/docker-compose.yml down
             docker-compose -f /projects/ley/docker-compose.yml up -d entry auth blog
 

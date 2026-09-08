@@ -5,7 +5,7 @@
 #   bash update.sh comment      # 只更新指定服务
 set -e
 
-SERVICES=(auth blog gateway)
+SERVICES=(auth blog entry)
 
 if [ $# -gt 0 ]; then
     # 只更新指定服务

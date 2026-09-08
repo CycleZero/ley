@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Ley 端到端测试：gateway → auth/blog → MySQL/Redis/etcd 全链路"""
+"""Ley 端到端测试：entry → auth/blog → MySQL/Redis/etcd 全链路"""
 import json, urllib.request, urllib.error, time, random, string, sys, urllib.parse
 
 BASE = "http://127.0.0.1:8000"
@@ -104,7 +104,7 @@ print("\n[9] 文章生命周期")
 title = "端到端测试文章 " + rand()
 s, r, ok = call("POST", "/api/v1/articles", {
     "title": title,
-    "content": "# 端到端测试\n\n这是通过 gateway 创建的文章。\n\n```go\nfmt.Println(\"hello e2e\")\n```",
+    "content": "# 端到端测试\n\n这是通过 entry 创建的文章。\n\n```go\nfmt.Println(\"hello e2e\")\n```",
     "category_id": cat_id,
     "tag_names": ["e2etag"],
     "status": "draft",

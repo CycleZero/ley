@@ -106,14 +106,9 @@ build-entry:
 run-entry:
 	go run ./app/entry/cmd/entry -conf ./data/entry/configs
 
-.PHONY: build-gateway
-# build gateway service (separate module)
-build-gateway:
-	cd app/gateway && go build -o ../../bin/gateway ./cmd/gateway
-
 .PHONY: build-all
-# build all services including gateway
-build-all: build build-gateway
+# build all services (auth + blog + entry)
+build-all: build
 .PHONY: generate
 # generate
 generate:
@@ -132,7 +127,6 @@ wire:
 	wire gen $(shell find ./app -name wire.go -not -path "*/test/*" | xargs -n1 dirname | sort -u)
 
 wire-all: wire
-	cd app/gateway && wire gen ./cmd/gateway 2>/dev/null || true
 
 rebuild: api config internal_proto wire build
 

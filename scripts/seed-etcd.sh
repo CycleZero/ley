@@ -106,4 +106,4 @@ put "ley/configs/auth/config.yaml" "${auth_cfg}"
 put "ley/configs/blog/config.yaml" "${blog_cfg}"
 put "ley/configs/entry/config.yaml" "${entry_cfg}"
 
-echo "完成。注意：网关 JWT 密钥若走 etcd 动态源，需另配 ley/configs/gateway/jwt（参考 configs/gateway.yaml 头注）。"
+echo "完成。注意：入口服务 JWT 密钥若走 etcd 动态源，需另配 ley/configs/entry/jwt（参考 configs/entry.yaml 头注）。"

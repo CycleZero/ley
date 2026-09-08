@@ -71,7 +71,7 @@ jobs:
         run: make test-unit
 
       - name: Build backend services
-        run: make build && make build-gateway
+        run: make build
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
@@ -179,20 +179,6 @@ jobs:
           file: ./app/blog/Dockerfile
           push: false
           tags: ley-blog:ci
-          build-contexts: |
-            ley-builder:v1=docker-image://ghcr.io/cyclezero/ley/ley-builder:latest
-            ley-runtime:v1=docker-image://ghcr.io/cyclezero/ley/ley-runtime:latest
-          cache-from: type=gha
-          build-args: |
-            GOPROXY=https://proxy.golang.org,direct
-
-      - name: Build gateway image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: ./app/gateway/Dockerfile
-          push: false
-          tags: ley-gateway:ci
           build-contexts: |
             ley-builder:v1=docker-image://ghcr.io/cyclezero/ley/ley-builder:latest
             ley-runtime:v1=docker-image://ghcr.io/cyclezero/ley/ley-runtime:latest

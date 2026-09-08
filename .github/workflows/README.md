@@ -51,7 +51,7 @@
 
 包含两个串行 Job：
 
-1. **build-backend** — 构建 auth/blog/gateway/entry 镜像并推送到 GHCR（ghcr.io/cyclezero/ley/）
+1. **build-backend** — 构建 auth/blog/entry 镜像并推送到 GHCR（ghcr.io/cyclezero/ley/）
 2. **deploy-backend** — SSH 到后端服务器，从 GHCR 拉取镜像并 tag 为 latest，docker compose 重启
 
 ### CD - Frontend (`deploy-frontend.yml`)
