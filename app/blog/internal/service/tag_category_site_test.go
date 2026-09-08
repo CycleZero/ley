@@ -12,6 +12,13 @@ import (
 	"github.com/go-kratos/kratos/v2/log"
 )
 
+// adminContext 构造管理员上下文（tag/category 写操作须管理员）
+func adminContext() context.Context {
+	return meta.NewClientCtx(context.Background(), &meta.RequestMetaData{
+		Auth: meta.Auth{UserID: 1, UserName: "admin", Role: "admin"},
+	})
+}
+
 // =============================================================================
 // TagService
 // =============================================================================
@@ -24,7 +31,7 @@ func newTestTagService(t *testing.T) *TagService {
 
 func TestServiceCreateTag(t *testing.T) {
 	svc := newTestTagService(t)
-	resp, err := svc.CreateTag(context.Background(), &blogv1.CreateTagRequest{Name: "Go"})
+	resp, err := svc.CreateTag(adminContext(), &blogv1.CreateTagRequest{Name: "Go"})
 	if err != nil {
 		t.Fatalf("CreateTag 失败: %v", err)
 	}
@@ -38,15 +45,15 @@ func TestServiceCreateTag(t *testing.T) {
 
 func TestServiceCreateTagEmpty(t *testing.T) {
 	svc := newTestTagService(t)
-	if _, err := svc.CreateTag(context.Background(), &blogv1.CreateTagRequest{Name: "  "}); err == nil {
+	if _, err := svc.CreateTag(adminContext(), &blogv1.CreateTagRequest{Name: "  "}); err == nil {
 		t.Fatal("空标签名应报错")
 	}
 }
 
 func TestServiceListTags(t *testing.T) {
 	svc := newTestTagService(t)
-	svc.CreateTag(context.Background(), &blogv1.CreateTagRequest{Name: "Go"})
-	svc.CreateTag(context.Background(), &blogv1.CreateTagRequest{Name: "React"})
+	svc.CreateTag(adminContext(), &blogv1.CreateTagRequest{Name: "Go"})
+	svc.CreateTag(adminContext(), &blogv1.CreateTagRequest{Name: "React"})
 
 	resp, err := svc.ListTags(context.Background(), &blogv1.ListTagsRequest{})
 	if err != nil {
@@ -69,7 +76,7 @@ func newTestCategoryService(t *testing.T) *CategoryService {
 
 func TestServiceCreateCategory(t *testing.T) {
 	svc := newTestCategoryService(t)
-	resp, err := svc.CreateCategory(context.Background(), &blogv1.CreateCategoryRequest{Name: "技术"})
+	resp, err := svc.CreateCategory(adminContext(), &blogv1.CreateCategoryRequest{Name: "技术"})
 	if err != nil {
 		t.Fatalf("Create 失败: %v", err)
 	}
@@ -94,7 +101,7 @@ func TestServiceListCategories(t *testing.T) {
 
 func TestServiceUpdateCategory(t *testing.T) {
 	svc := newTestCategoryService(t)
-	resp, err := svc.UpdateCategory(context.Background(), &blogv1.UpdateCategoryRequest{
+	resp, err := svc.UpdateCategory(adminContext(), &blogv1.UpdateCategoryRequest{
 		Id:   1,
 		Name: "新分类名",
 		Slug: "new-slug",
@@ -110,7 +117,7 @@ func TestServiceUpdateCategory(t *testing.T) {
 // 业务约束：slug 必填
 func TestServiceUpdateCategoryWithoutSlug(t *testing.T) {
 	svc := newTestCategoryService(t)
-	_, err := svc.UpdateCategory(context.Background(), &blogv1.UpdateCategoryRequest{
+	_, err := svc.UpdateCategory(adminContext(), &blogv1.UpdateCategoryRequest{
 		Id:   1,
 		Name: "新分类名",
 	})
@@ -122,7 +129,7 @@ func TestServiceUpdateCategoryWithoutSlug(t *testing.T) {
 // 业务约束：有子分类的分类不能删除（mock ListChildren 返回 1 个子类）
 func TestServiceDeleteCategoryWithChildren(t *testing.T) {
 	svc := newTestCategoryService(t)
-	_, err := svc.DeleteCategory(context.Background(), &blogv1.DeleteCategoryRequest{Id: 1})
+	_, err := svc.DeleteCategory(adminContext(), &blogv1.DeleteCategoryRequest{Id: 1})
 	if err == nil {
 		t.Fatal("有子分类应拒绝删除")
 	}

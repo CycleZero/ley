@@ -10,8 +10,8 @@ import (
 	blogv1 "github.com/CycleZero/ley/api/blog/v1"
 	"github.com/CycleZero/ley/app/blog/internal/biz"
 	"github.com/CycleZero/ley/pkg/cache"
-	"github.com/CycleZero/ley/pkg/meta"
 	"github.com/CycleZero/ley/pkg/eventbus"
+	"github.com/CycleZero/ley/pkg/meta"
 	mqPkg "github.com/CycleZero/ley/pkg/mq"
 	"github.com/CycleZero/ley/pkg/testutil/datatest"
 	"github.com/go-kratos/kratos/v2/log"
@@ -92,16 +92,26 @@ func (m *mockArticleRepo) List(ctx context.Context, q biz.ArticleListQuery) ([]*
 func (m *mockArticleRepo) Search(ctx context.Context, keyword string, page, pageSize int) ([]*biz.Article, int64, error) {
 	return nil, 0, nil
 }
-func (m *mockArticleRepo) AssociateTags(ctx context.Context, articleID uint, tagIDs []uint) error { return nil }
-func (m *mockArticleRepo) SyncTags(ctx context.Context, articleID uint, tagIDs []uint) error       { return nil }
-func (m *mockArticleRepo) InsertLike(ctx context.Context, articleID, userID uint) error            { return nil }
-func (m *mockArticleRepo) DeleteLike(ctx context.Context, articleID, userID uint) error            { return nil }
-func (m *mockArticleRepo) IsLiked(ctx context.Context, articleID, userID uint) (bool, error)       { return false, nil }
-func (m *mockArticleRepo) IncrementViewCount(ctx context.Context, id uint, delta int64) error      { return nil }
+func (m *mockArticleRepo) AssociateTags(ctx context.Context, articleID uint, tagIDs []uint) error {
+	return nil
+}
+func (m *mockArticleRepo) SyncTags(ctx context.Context, articleID uint, tagIDs []uint) error {
+	return nil
+}
+func (m *mockArticleRepo) InsertLike(ctx context.Context, articleID, userID uint) error { return nil }
+func (m *mockArticleRepo) DeleteLike(ctx context.Context, articleID, userID uint) error { return nil }
+func (m *mockArticleRepo) IsLiked(ctx context.Context, articleID, userID uint) (bool, error) {
+	return false, nil
+}
+func (m *mockArticleRepo) IncrementViewCount(ctx context.Context, id uint, delta int64) error {
+	return nil
+}
 func (m *mockArticleRepo) UpdateTagsArticleCount(ctx context.Context, tagIDs []uint, delta int64) error {
 	return nil
 }
-func (m *mockArticleRepo) FlushViewCounts(ctx context.Context, counts map[uint]int64) error { return nil }
+func (m *mockArticleRepo) FlushViewCounts(ctx context.Context, counts map[uint]int64) error {
+	return nil
+}
 
 type mockTagRepo struct {
 	mu   sync.Mutex
@@ -280,8 +290,8 @@ func TestArticleStatusStr(t *testing.T) {
 	cases := map[biz.ArticleStatus]string{
 		biz.ArticleStatusPublished: "published",
 		biz.ArticleStatusArchived:  "archived",
-		biz.ArticleStatusDraft:      "draft",
-		biz.ArticleStatus(99):       "draft", // 未知状态回退 draft
+		biz.ArticleStatusDraft:     "draft",
+		biz.ArticleStatus(99):      "draft", // 未知状态回退 draft
 	}
 	for status, want := range cases {
 		if got := articleStatusStr(status); got != want {
