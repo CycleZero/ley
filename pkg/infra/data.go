@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/CycleZero/ley/pkg/log"
+	"github.com/CycleZero/ley/pkg/trace"
 
 	"github.com/minio/minio-go/v7"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -81,6 +82,11 @@ func NewDB(
 	// 空闲连接最大存活时间：超时后关闭，释放数据库服务端资源
 	sqlDB.SetConnMaxIdleTime(30 * time.Minute)
 
+	// 注册 GORM OTel 插件：每条 SQL 自动产生 data 层 span 与耗时指标。
+	if err := masterDB.Use(trace.NewGormPlugin()); err != nil {
+		panic("注册 GORM 追踪插件失败：" + err.Error())
+	}
+
 	return masterDB
 }
 
@@ -130,4 +136,12 @@ func GetTransaction(c context.Context) *gorm.DB {
 		return db
 	}
 	return nil
+}
+
+// DBSystemName 返回 GORM 方言名（如 "mysql"/"postgres"），供追踪属性标注真实数据库类型。
+func DBSystemName(db *gorm.DB) string {
+	if db != nil && db.Dialector != nil {
+		return db.Dialector.Name()
+	}
+	return "unknown"
 }

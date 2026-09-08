@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/CycleZero/ley/pkg/trace"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -26,6 +27,8 @@ func NewRedisCache(host string, port int, password string, db int) Cache {
 		PoolSize:     20, // 限制连接池大小（默认 10×CPU=80，5 个服务共 400 连接过度浪费）
 		MinIdleConns: 5,  // 保持少量热连接，减少冷启动延迟
 	})
+	// 挂载 OTel Hook：所有 Redis 命令自动产生 span 与耗时指标。
+	client.AddHook(trace.NewRedisHook())
 
 	// 启动时 PING 验证连接
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)

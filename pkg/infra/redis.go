@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/CycleZero/ley/pkg/log"
+	"github.com/CycleZero/ley/pkg/trace"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -29,6 +30,8 @@ func NewRedisClient(
 		Password: password,
 		DB:       db, // use default DB
 	})
+	// 挂载 OTel Hook：所有 Redis 命令自动产生 span 与耗时指标。
+	rdb.AddHook(trace.NewRedisHook())
 	log.GetLogger().Info("连接Redis成功")
 	return rdb
 }
