@@ -68,9 +68,9 @@ type MinioOSS struct {
 	bucket string
 }
 
-// NewMinioOSS 创建 MinIO OSS 客户端实例
+// NewMinioOSS 创建 MinIO OSS 客户端实例（自动附加 OTel 追踪装饰器）
 func NewMinioOSS(core *minio.Core, bucket string) OSSWithBucket {
-	return &MinioOSS{core: core, bucket: bucket}
+	return NewTracedOSS(&MinioOSS{core: core, bucket: bucket})
 }
 
 // PutObject 上传对象（高层 API，SDK 内部对超大/未知大小文件自动转 multipart）

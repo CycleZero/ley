@@ -81,7 +81,7 @@ func NewAliyunOSS(cfg AliyunConfig) (OSSWithBucket, error) {
 			WithCredentialsProvider(credentials.NewStaticCredentialsProvider(cfg.AccessKeyID, cfg.AccessKeySecret)).
 			WithRegion(cfg.Region),
 	)
-	return &AliyunOSS{client: client, bucket: cfg.BucketName}, nil
+	return NewTracedOSS(&AliyunOSS{client: client, bucket: cfg.BucketName}), nil
 }
 
 // PutObject 上传对象
