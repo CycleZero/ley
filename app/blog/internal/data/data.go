@@ -56,7 +56,7 @@ func NewData(db *gorm.DB, c cache.Cache, logger log.Logger) (*Data, func()) {
 func (d *Data) startSpan(ctx context.Context, name string) (context.Context, trace.Span) {
 	ctx, span := d.tracer.Start(ctx, name, trace.WithSpanKind(trace.SpanKindClient))
 	span.SetAttributes(
-		attribute.String("db.system", "postgresql"),
+		attribute.String("db.system", infra.DBSystemName(d.db)),
 		attribute.String("db.service", "blog-service"),
 	)
 	return ctx, span

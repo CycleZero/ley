@@ -3,6 +3,8 @@ package data
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"time"
 
@@ -60,11 +62,16 @@ func (r *siteRepo) GetConfig(ctx context.Context) (*biz.SiteSetting, error) {
 	// DB 查询
 	var po SiteSettingPO
 	if err := r.data.db.WithContext(ctx).Where("id = 1").First(&po).Error; err != nil {
-		// 首次访问，表中无数据 → 返回空配置
-		return &biz.SiteSetting{}, nil
+		// 仅"记录不存在"视为首次访问（返回空配置）；其余 DB 故障上抛，避免静默降级
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return &biz.SiteSetting{}, nil
+		}
+		return nil, fmt.Errorf("get site config: %w", err)
 	}
 
-	json.Unmarshal(po.Config, &cfg)
+	if err := json.Unmarshal(po.Config, &cfg); err != nil {
+		return nil, fmt.Errorf("decode site config: %w", err)
+	}
 	_ = r.data.cache.Set(ctx, cfgKey, &cfg, 10*60*1000*1000*1000) // 10min (nanoseconds)
 	return &cfg, nil
 }
@@ -88,7 +95,7 @@ func (r *siteRepo) SaveConfig(ctx context.Context, cfg *biz.SiteSetting) error {
 // CreateBackground 上传背景图片到 MinIO 并写入 DB。
 func (r *siteRepo) CreateBackground(ctx context.Context, bg *biz.SiteBackground, file io.Reader) error {
 	key := uuid.Must(uuid.NewV7()).String()
-	if err := r.oss.PutObject(ctx, key, file, -1, "image/jpeg"); err != nil {
+	if err := r.oss.PutObject(ctx, key, file, -1, bg.MimeType); err != nil {
 		return err
 	}
 	bg.URL = key
