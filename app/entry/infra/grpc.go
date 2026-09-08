@@ -4,8 +4,10 @@ import (
 	"context"
 	"time"
 
+	"github.com/CycleZero/ley/pkg/metrics"
 	"github.com/CycleZero/ley/pkg/util"
 	kratosmd "github.com/go-kratos/kratos/v2/middleware/metadata"
+	kratostracing "github.com/go-kratos/kratos/v2/middleware/tracing"
 	"github.com/go-kratos/kratos/v2/registry"
 	grpcx "github.com/go-kratos/kratos/v2/transport/grpc"
 	"google.golang.org/grpc"
@@ -29,8 +31,9 @@ func dialServiceConn(dis registry.Discovery, endpoint string, extras ...grpcx.Cl
 	opts := []grpcx.ClientOption{
 		grpcx.WithDiscovery(dis),
 		grpcx.WithEndpoint(endpoint),
-		// 用户上下文跨服务透传：meta.NewClientCtx → kratos metadata → wire header
-		grpcx.WithMiddleware(kratosmd.Client()),
+		// 链路续接：把当前请求 span 上下文注入 gRPC metadata（traceparent），
+		// 下游 auth/blog 据此挂到同一 trace 上；metrics 记录服务间调用指标。
+		grpcx.WithMiddleware(kratostracing.Client(), metrics.ClientMiddleware(), kratosmd.Client()),
 		// 单次调用超时（kratos interceptor 语义），防下游无响应时请求悬挂
 		grpcx.WithTimeout(3 * time.Second),
 	}

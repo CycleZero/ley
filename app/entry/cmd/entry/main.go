@@ -11,6 +11,7 @@ import (
 	"github.com/CycleZero/ley/app/entry/conf"
 	commonconf "github.com/CycleZero/ley/conf"
 	locallog "github.com/CycleZero/ley/pkg/log"
+	"github.com/CycleZero/ley/pkg/metrics"
 	"github.com/CycleZero/ley/pkg/trace"
 	"github.com/CycleZero/ley/pkg/util"
 	"go.uber.org/zap"
@@ -56,14 +57,24 @@ func main() {
 	logger := locallog.GetLogger()
 	logger.Info("日志初始化成功", zap.String("service", Name))
 
-	// 3. 初始化链路追踪（可选：引导配置未填 endpoint 则跳过）
-	if bc.Trace != nil && bc.Trace.Endpoint != "" {
-		if err := trace.InitTracer(bc.Trace.Endpoint, util.DisServiceName(Name)); err != nil {
-			logger.Error("初始化链路追踪失败", zap.Error(err))
-		}
+	// 3. 初始化可观测指标（Prometheus /metrics，OTel 兼容）
+	if _, err := metrics.New(util.DisServiceName(Name)); err != nil {
+		logger.Error("初始化指标失败", zap.Error(err))
 	}
 
-	// 4. Wire 注入应用（cleanup 预留给后续 wave 释放 etcd 等资源）
+	// 4. 初始化链路追踪（OTLP/HTTP + W3C 传播；退出时刷出缓冲 span）
+	if bc.Trace != nil && bc.Trace.Endpoint != "" {
+		if _, err := trace.Init(trace.Config{
+			Endpoint:    bc.Trace.Endpoint,
+			ServiceName: util.DisServiceName(Name),
+			Insecure:    true,
+		}); err != nil {
+			logger.Error("初始化链路追踪失败", zap.Error(err))
+		}
+		defer func() { _ = trace.Shutdown(context.Background()) }()
+	}
+
+	// 5. Wire 注入应用（cleanup 预留给后续 wave 释放 etcd 等资源）
 	app, cleanup, err := initApp(bc)
 	if err != nil {
 		panic(err)
