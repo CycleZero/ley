@@ -11,8 +11,6 @@ import (
 	"time"
 
 	"github.com/fatih/color"
-	kratoszap "github.com/go-kratos/kratos/contrib/log/zap/v2"
-	"github.com/go-kratos/kratos/v2/log"
 	"github.com/shengyanli1982/law"
 	"go.uber.org/zap"
 	"go.uber.org/zap/buffer"
@@ -236,6 +234,13 @@ func SetGlobalLogger(l *Logger) {
 	globalLogger = l
 }
 
+// SwapGlobalLogger 替换全局日志器并返回旧值，便于测试中保存/恢复全局状态。
+func SwapGlobalLogger(l *Logger) *Logger {
+	prev := globalLogger
+	globalLogger = l
+	return prev
+}
+
 // ============================================================
 // 高性能日志 Writer
 // ============================================================
@@ -320,21 +325,5 @@ func NewLawAsyncWriter(w io.Writer) *law.WriteAsyncer {
 	return law.NewWriteAsyncer(w, conf)
 }
 
-// ============================================================
-// Kratos 适配
-// ============================================================
-
-func GetKratosLogger() log.Logger {
-	l := kratoszap.NewLogger(GetLogger().Logger)
-	//kratoszap.WithMessageKey("default")(l)
-	//ll := log.With(l, "time", log.Timestamp(time.DateTime), "caller", log.Caller(4))
-	return l
-}
-
-func GetKratosLogHelper() *log.Helper {
-	//log.With()
-	h := log.NewHelper(GetKratosLogger(),
-		log.WithSprint(Sprint),
-	)
-	return h
-}
+// Kratos 日志适配见 kratos.go（GetKratosLogger / GetKratosLogHelper），
+// 关联字段注入见 context.go（Ctx / WithContext）。
