@@ -9,9 +9,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/CycleZero/ley/pkg/metrics"
 	kerrors "github.com/go-kratos/kratos/v2/errors"
 	"github.com/go-kratos/kratos/v2/log"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/metric"
 )
 
 // =============================================================================
@@ -81,8 +83,8 @@ var allowedMimeTypes = map[string]bool{
 	"text/markdown":   true,
 	"text/csv":        true,
 	// 压缩包
-	"application/zip":  true,
-	"application/gzip": true,
+	"application/zip":   true,
+	"application/gzip":  true,
 	"application/x-tar": true,
 }
 
@@ -123,13 +125,13 @@ var magicNumbers = map[string][]byte{
 // =============================================================================
 
 var (
-	ErrFileNotFound = kerrors.NotFound("FILE_NOT_FOUND", "文件不存在")
-	ErrFileTooLarge = kerrors.BadRequest("FILE_TOO_LARGE", "文件大小超过限制")
-	ErrMimeNotAllowed = kerrors.BadRequest("MIME_NOT_ALLOWED", "不支持的文件类型")
-	ErrExtensionNotAllowed = kerrors.BadRequest("EXT_NOT_ALLOWED", "不支持的文件扩展名")
-	ErrInvalidFilename = kerrors.BadRequest("INVALID_FILENAME", "非法的文件名")
-	ErrMimeMismatch = kerrors.BadRequest("MIME_MISMATCH", "文件类型与实际内容不匹配")
-	ErrInvalidImage = kerrors.BadRequest("INVALID_IMAGE", "图片文件损坏或非真实图片")
+	ErrFileNotFound         = kerrors.NotFound("FILE_NOT_FOUND", "文件不存在")
+	ErrFileTooLarge         = kerrors.BadRequest("FILE_TOO_LARGE", "文件大小超过限制")
+	ErrMimeNotAllowed       = kerrors.BadRequest("MIME_NOT_ALLOWED", "不支持的文件类型")
+	ErrExtensionNotAllowed  = kerrors.BadRequest("EXT_NOT_ALLOWED", "不支持的文件扩展名")
+	ErrInvalidFilename      = kerrors.BadRequest("INVALID_FILENAME", "非法的文件名")
+	ErrMimeMismatch         = kerrors.BadRequest("MIME_MISMATCH", "文件类型与实际内容不匹配")
+	ErrInvalidImage         = kerrors.BadRequest("INVALID_IMAGE", "图片文件损坏或非真实图片")
 	ErrFilePermissionDenied = kerrors.Forbidden("FILE_PERMISSION_DENIED", "无权操作此文件")
 )
 
@@ -143,12 +145,18 @@ var (
 // =============================================================================
 
 type FileUseCase struct {
-	repo FileRepo     // 文件数据访问
-	log  *log.Helper  // 结构化日志
+	repo   FileRepo    // 文件数据访问
+	log    *log.Helper // 结构化日志
+	upload metric.Int64Counter
 }
 
+// NewFileUseCase 构造文件用例；业务指标在构造期创建（Wire 阶段，metrics.New 已完成）。
 func NewFileUseCase(repo FileRepo, logger log.Logger) *FileUseCase {
-	return &FileUseCase{repo: repo, log: log.NewHelper(logger)}
+	return &FileUseCase{
+		repo:   repo,
+		log:    log.NewHelper(logger),
+		upload: metrics.Counter("blog_file_upload_total", "文件上传次数"),
+	}
 }
 
 // =============================================================================
@@ -165,7 +173,8 @@ func NewFileUseCase(repo FileRepo, logger log.Logger) *FileUseCase {
 // 全部通过后方才委托 data 层存储。
 // =============================================================================
 
-func (uc *FileUseCase) Upload(ctx context.Context, filename, mimeType string, content []byte) (*File, error) {
+func (uc *FileUseCase) Upload(ctx context.Context, filename, mimeType string, content []byte) (f *File, err error) {
+	defer func() { recordResult(ctx, uc.upload, err) }()
 	userID, err := getCurrentUserID(ctx)
 	if err != nil {
 		uc.log.WithContext(ctx).Debugf("[Upload] 未认证")
@@ -296,11 +305,13 @@ func (uc *FileUseCase) GetFile(ctx context.Context, id uint) (*File, error) {
 	}
 	uc.log.WithContext(ctx).Debugf("[GetFile] 文件找到 id=%d owner=%d", id, file.UserID)
 
-	// 步骤2: 所有权校验（IDOR 防护）
-	// 若用户已认证但不是文件所有者 → 拒绝
-	// 若用户未认证 → 放行（公开访问，如前端渲染文章中的图片）
+	// 步骤2: 所有权校验（IDOR 防护）——须登录，且仅能访问本人文件
 	userID, err := getCurrentUserID(ctx)
-	if err == nil && file.UserID != uint(userID) {
+	if err != nil {
+		uc.log.WithContext(ctx).Warnf("[GetFile] 未认证 id=%d", id)
+		return nil, ErrUserNotAuthenticated
+	}
+	if file.UserID != uint(userID) {
 		uc.log.WithContext(ctx).Warnf("[GetFile] 权限拒绝 id=%d owner=%d requester=%d",
 			id, file.UserID, userID)
 		return nil, ErrFilePermissionDenied
@@ -399,6 +410,10 @@ func (uc *FileUseCase) ListFiles(ctx context.Context, page, pageSize int) ([]*Fi
 // =============================================================================
 
 func (uc *FileUseCase) GetPresignedPutURL(ctx context.Context, filename, mimeType string) (string, string, error) {
+	if _, err := getCurrentUserID(ctx); err != nil {
+		uc.log.WithContext(ctx).Warnf("[GetPresignedPutURL] 未认证")
+		return "", "", err
+	}
 	uc.log.WithContext(ctx).Debugf("[GetPresignedPutURL] 开始 filename=%q mime=%q", filename, mimeType)
 
 	// 步骤1: 校验扩展名白名单
@@ -434,10 +449,10 @@ func (uc *FileUseCase) GetPresignedPutURL(ctx context.Context, filename, mimeTyp
 // verifyMagicNumber 检查文件头部魔数是否与声明的 MIME 类型匹配
 //
 // 逻辑：
-//   1. 查找该 MIME 类型对应的魔数字节序列
-//   2. 未找到魔数定义 → 直接放行（如 text/plain 无固定文件头）
-//   3. 文件长度不足 → 拒绝
-//   4. 逐字节比对 → 全部匹配才通过
+//  1. 查找该 MIME 类型对应的魔数字节序列
+//  2. 未找到魔数定义 → 直接放行（如 text/plain 无固定文件头）
+//  3. 文件长度不足 → 拒绝
+//  4. 逐字节比对 → 全部匹配才通过
 func verifyMagicNumber(data []byte, mimeType string) bool {
 	signature, ok := magicNumbers[mimeType]
 	if !ok {
@@ -455,30 +470,28 @@ func verifyMagicNumber(data []byte, mimeType string) bool {
 }
 
 // isImageContent 检查文件字节是否为可识别的图片格式
-//
-// 通过文件头魔数识别：PNG (89 50 4E 47), JPEG (FF D8 FF), GIF (47 49 46 38), WebP (52 49 46 46)
-// 必须是至少 4 字节的文件头才能判断。
 func isImageContent(data []byte) bool {
-	if len(data) < 3 {
-		return false
-	}
-	// PNG: 89 50 4E 47
+	return detectImageMimeType(data) != ""
+}
+
+// detectImageMimeType 按文件头魔数识别图片 MIME 类型，无法识别时返回空串。
+// 识别：PNG (89 50 4E 47)、JPEG (FF D8 FF)、GIF (47 49 46 38)、WebP (RIFF....WEBP)。
+func detectImageMimeType(data []byte) string {
 	if len(data) >= 4 && data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47 {
-		return true
+		return "image/png"
 	}
-	// JPEG: FF D8 FF
-	if data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF {
-		return true
+	if len(data) >= 3 && data[0] == 0xFF && data[1] == 0xD8 && data[2] == 0xFF {
+		return "image/jpeg"
 	}
-	// GIF: 47 49 46 38 (GIF8)
 	if len(data) >= 4 && data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x38 {
-		return true
+		return "image/gif"
 	}
-	// WebP: 52 49 46 46 (RIFF)
-	if len(data) >= 4 && data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46 {
-		return true
+	// WebP 需校验 RIFF 容器第 8-11 字节为 "WEBP"，避免把 WAV/AVI 等 RIFF 容器误判为图片
+	if len(data) >= 12 && data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46 &&
+		data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50 {
+		return "image/webp"
 	}
-	return false
+	return ""
 }
 
 // randomHex 生成 n 字节的随机十六进制字符串（用于 object key 去重）

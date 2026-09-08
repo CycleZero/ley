@@ -7,9 +7,10 @@ import (
 
 func TestTagUseCase_CreateTag(t *testing.T) {
 	uc, _ := setupTagUseCase()
+	admin := ctxWithRole(1, "admin")
 
 	t.Run("happy path", func(t *testing.T) {
-		tag, err := uc.CreateTag(context.Background(), "TypeScript")
+		tag, err := uc.CreateTag(admin, "TypeScript")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -19,15 +20,15 @@ func TestTagUseCase_CreateTag(t *testing.T) {
 	})
 
 	t.Run("empty name", func(t *testing.T) {
-		_, err := uc.CreateTag(context.Background(), "   ")
+		_, err := uc.CreateTag(admin, "   ")
 		if err != ErrTagNameEmpty {
 			t.Errorf("expected ErrTagNameEmpty, got %v", err)
 		}
 	})
 
 	t.Run("duplicate", func(t *testing.T) {
-		uc.CreateTag(context.Background(), "Go")
-		_, err := uc.CreateTag(context.Background(), "Go")
+		uc.CreateTag(admin, "Go")
+		_, err := uc.CreateTag(admin, "Go")
 		if err != ErrTagNameExists {
 			t.Errorf("expected ErrTagNameExists, got %v", err)
 		}
@@ -36,8 +37,9 @@ func TestTagUseCase_CreateTag(t *testing.T) {
 
 func TestTagUseCase_ListTags(t *testing.T) {
 	uc, _ := setupTagUseCase()
-	uc.CreateTag(context.Background(), "Vue")
-	uc.CreateTag(context.Background(), "React")
+	admin := ctxWithRole(1, "admin")
+	uc.CreateTag(admin, "Vue")
+	uc.CreateTag(admin, "React")
 
 	tags, err := uc.ListTags(context.Background())
 	if err != nil {
@@ -50,9 +52,10 @@ func TestTagUseCase_ListTags(t *testing.T) {
 
 func TestTagUseCase_DeleteTag(t *testing.T) {
 	uc, _ := setupTagUseCase()
-	tag, _ := uc.CreateTag(context.Background(), "Rust")
+	admin := ctxWithRole(1, "admin")
+	tag, _ := uc.CreateTag(admin, "Rust")
 
-	err := uc.DeleteTag(context.Background(), tag.ID)
+	err := uc.DeleteTag(admin, tag.ID)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -60,9 +63,10 @@ func TestTagUseCase_DeleteTag(t *testing.T) {
 
 func TestCategoryUseCase_CreateCategory(t *testing.T) {
 	uc, _ := setupCategoryUseCase()
+	admin := ctxWithRole(1, "admin")
 
 	t.Run("root category", func(t *testing.T) {
-		cat, err := uc.CreateCategory(context.Background(), "Frontend", "", "", nil, 1)
+		cat, err := uc.CreateCategory(admin, "Frontend", "", "", nil, 1)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -72,7 +76,7 @@ func TestCategoryUseCase_CreateCategory(t *testing.T) {
 	})
 
 	t.Run("empty name", func(t *testing.T) {
-		_, err := uc.CreateCategory(context.Background(), "  ", "slug", "", nil, 0)
+		_, err := uc.CreateCategory(admin, "  ", "slug", "", nil, 0)
 		if err == nil {
 			t.Error("expected error for empty name")
 		}
@@ -81,12 +85,13 @@ func TestCategoryUseCase_CreateCategory(t *testing.T) {
 
 func TestCategoryUseCase_DeleteCategory(t *testing.T) {
 	uc, cr := setupCategoryUseCase()
+	admin := ctxWithRole(1, "admin")
 
 	cat := &Category{Name: "DevOps", Slug: "devops"}
 	cr.Create(context.Background(), cat)
 
 	t.Run("delete empty category", func(t *testing.T) {
-		err := uc.DeleteCategory(context.Background(), cat.ID)
+		err := uc.DeleteCategory(admin, cat.ID)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -99,7 +104,7 @@ func TestCategoryUseCase_DeleteCategory(t *testing.T) {
 		child := &Category{Name: "Child", Slug: "child", ParentID: &pid}
 		cr.Create(context.Background(), child)
 
-		err := uc.DeleteCategory(context.Background(), parent.ID)
+		err := uc.DeleteCategory(admin, parent.ID)
 		if err != ErrCategoryHasChildren {
 			t.Errorf("expected ErrCategoryHasChildren, got %v", err)
 		}
@@ -108,11 +113,12 @@ func TestCategoryUseCase_DeleteCategory(t *testing.T) {
 
 func TestCategoryUseCase_UpdateCategory(t *testing.T) {
 	uc, cr := setupCategoryUseCase()
+	admin := ctxWithRole(1, "admin")
 
 	cat := &Category{Name: "Old", Slug: "old"}
 	cr.Create(context.Background(), cat)
 
-	_, err := uc.UpdateCategory(context.Background(), cat.ID, "NewName", "new-slug", "desc", nil, 2)
+	_, err := uc.UpdateCategory(admin, cat.ID, "NewName", "new-slug", "desc", nil, 2)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -123,9 +129,52 @@ func TestCategoryUseCase_UpdateCategory(t *testing.T) {
 	}
 }
 
+// FIX-4: tag/category 写操作须管理员。此前 blog 侧无校验，仅靠 entry 的
+// AUTHOR_OR_ADMIN 过渡收口；直连服务（gRPC/HTTP 端口）即可越权写。
+func TestTagCategoryUseCase_RequiresAdminForWrites(t *testing.T) {
+	tagUC, _ := setupTagUseCase()
+	catUC, _ := setupCategoryUseCase()
+
+	t.Run("anonymous CreateTag rejected", func(t *testing.T) {
+		if _, err := tagUC.CreateTag(context.Background(), "Go"); err != ErrPermissionDenied {
+			t.Errorf("匿名 CreateTag 应拒绝: got %v", err)
+		}
+	})
+	t.Run("author CreateTag rejected", func(t *testing.T) {
+		if _, err := tagUC.CreateTag(ctxWithRole(1, "author"), "Go"); err != ErrPermissionDenied {
+			t.Errorf("author CreateTag 应拒绝: got %v", err)
+		}
+	})
+	t.Run("admin CreateTag allowed", func(t *testing.T) {
+		if _, err := tagUC.CreateTag(ctxWithRole(1, "admin"), "Go"); err != nil {
+			t.Fatalf("admin CreateTag 应放行: %v", err)
+		}
+	})
+	t.Run("reader DeleteTag rejected", func(t *testing.T) {
+		if err := tagUC.DeleteTag(ctxWithRole(1, "reader"), 1); err != ErrPermissionDenied {
+			t.Errorf("reader DeleteTag 应拒绝: got %v", err)
+		}
+	})
+	t.Run("anonymous CreateCategory rejected", func(t *testing.T) {
+		if _, err := catUC.CreateCategory(context.Background(), "Frontend", "frontend", "", nil, 0); err != ErrPermissionDenied {
+			t.Errorf("匿名 CreateCategory 应拒绝: got %v", err)
+		}
+	})
+	t.Run("author UpdateCategory rejected", func(t *testing.T) {
+		if _, err := catUC.UpdateCategory(ctxWithRole(1, "author"), 1, "N", "n", "", nil, 0); err != ErrPermissionDenied {
+			t.Errorf("author UpdateCategory 应拒绝: got %v", err)
+		}
+	})
+	t.Run("reader DeleteCategory rejected", func(t *testing.T) {
+		if err := catUC.DeleteCategory(ctxWithRole(1, "reader"), 1); err != ErrPermissionDenied {
+			t.Errorf("reader DeleteCategory 应拒绝: got %v", err)
+		}
+	})
+}
+
 func TestCategoryUseCase_ListCategories(t *testing.T) {
 	uc, _ := setupCategoryUseCase()
-	uc.CreateCategory(context.Background(), "Tech", "tech", "", nil, 1)
+	uc.CreateCategory(ctxWithRole(1, "admin"), "Tech", "tech", "", nil, 1)
 
 	cats, err := uc.ListCategories(context.Background())
 	if err != nil {
@@ -315,7 +364,9 @@ func TestTruncateContent(t *testing.T) {
 	}
 
 	long := make([]byte, 600)
-	for i := range long { long[i] = 'a' }
+	for i := range long {
+		long[i] = 'a'
+	}
 	result = truncateContent(string(long), 500)
 	if len([]rune(result)) > 503 { // 500 + "..."
 		t.Errorf("expected truncated, got len=%d", len(result))
@@ -381,5 +432,33 @@ func TestTagNameToSlug(t *testing.T) {
 	slug := tagNameToSlug("My Tag Name")
 	if slug != "my-tag-name" {
 		t.Errorf("expected my-tag-name, got %s", slug)
+	}
+}
+
+// FIX-7: 背景图须保留真实 MIME——data 层曾硬编码 image/jpeg，PNG/WebP 被错标
+func TestSiteUseCase_AddBackgroundPreservesMimeType(t *testing.T) {
+	uc, _ := setupSiteUseCase()
+	admin := ctxWithRole(1, "admin")
+
+	cases := []struct {
+		name string
+		data []byte
+		want string
+	}{
+		{"png", []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}, "image/png"},
+		{"jpeg", []byte{0xFF, 0xD8, 0xFF, 0xE0}, "image/jpeg"},
+		{"gif", []byte{0x47, 0x49, 0x46, 0x38, 0x39, 0x61}, "image/gif"},
+		{"webp", []byte{0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50}, "image/webp"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			bg, err := uc.AddBackground(admin, "wall."+tc.name, tc.data)
+			if err != nil {
+				t.Fatalf("AddBackground 失败: %v", err)
+			}
+			if bg.MimeType != tc.want {
+				t.Errorf("MIME 类型应为 %q，实际 %q", tc.want, bg.MimeType)
+			}
+		})
 	}
 }

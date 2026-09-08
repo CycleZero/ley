@@ -105,7 +105,9 @@ func TestArticleUseCase_DeleteArticle(t *testing.T) {
 		events := eb.Events()
 		found := false
 		for _, e := range events {
-			if e.Topic == TopicArticleDeleted { found = true }
+			if e.Topic == TopicArticleDeleted {
+				found = true
+			}
 		}
 		if !found {
 			t.Error("expected delete event published")
@@ -138,7 +140,9 @@ func TestArticleUseCase_PublishArticle(t *testing.T) {
 		events := eb.Events()
 		found := false
 		for _, e := range events {
-			if e.Topic == TopicArticlePublished { found = true }
+			if e.Topic == TopicArticlePublished {
+				found = true
+			}
 		}
 		if !found {
 			t.Error("expected publish event")

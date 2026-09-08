@@ -11,9 +11,11 @@ import (
 	"github.com/CycleZero/ley/pkg/cache"
 	"github.com/CycleZero/ley/pkg/eventbus"
 	"github.com/CycleZero/ley/pkg/meta"
+	"github.com/CycleZero/ley/pkg/metrics"
 
 	kerrors "github.com/go-kratos/kratos/v2/errors"
 	"github.com/go-kratos/kratos/v2/log"
+	"go.opentelemetry.io/otel/metric"
 )
 
 // =============================================================================
@@ -46,26 +48,26 @@ const (
 // =============================================================================
 
 type Article struct {
-	ID             uint           // 主键
-	Title          string         // 标题 (2-200字符)
-	Slug           string         // URL slug (唯一)
-	Content        string         // 正文 (Markdown)
-	Excerpt        string         // 摘要 (自动截取前500字符)
-	CoverImage     string         // 封面图URL
-	Status         ArticleStatus  // 当前状态
-	AuthorID       uint           // 作者主键
-	AuthorName     string         // 作者显示名 (data层关联填充)
-	AuthorAvatar   string         // 作者头像 (data层关联填充)
-	CategoryID     *uint          // 分类主键 (可为nil)
-	CategoryName   string         // 分类名 (data层关联填充)
-	Tags           []*Tag         // 标签列表
-	ViewCount      int64          // 浏览数
-	LikeCount      int64          // 点赞数
-	IsTop          bool           // 是否置顶
-	IsLiked        bool           // 当前用户是否已点赞 (运行时计算)
-	PublishedAt    *time.Time     // 首次发布时间
-	CreatedAt      time.Time      // 创建时间
-	UpdatedAt      time.Time      // 最后更新时间
+	ID           uint          // 主键
+	Title        string        // 标题 (2-200字符)
+	Slug         string        // URL slug (唯一)
+	Content      string        // 正文 (Markdown)
+	Excerpt      string        // 摘要 (自动截取前500字符)
+	CoverImage   string        // 封面图URL
+	Status       ArticleStatus // 当前状态
+	AuthorID     uint          // 作者主键
+	AuthorName   string        // 作者显示名 (data层关联填充)
+	AuthorAvatar string        // 作者头像 (data层关联填充)
+	CategoryID   *uint         // 分类主键 (可为nil)
+	CategoryName string        // 分类名 (data层关联填充)
+	Tags         []*Tag        // 标签列表
+	ViewCount    int64         // 浏览数
+	LikeCount    int64         // 点赞数
+	IsTop        bool          // 是否置顶
+	IsLiked      bool          // 当前用户是否已点赞 (运行时计算)
+	PublishedAt  *time.Time    // 首次发布时间
+	CreatedAt    time.Time     // 创建时间
+	UpdatedAt    time.Time     // 最后更新时间
 }
 
 // =============================================================================
@@ -144,6 +146,19 @@ type ArticleUseCase struct {
 	cache   cache.Cache       // Redis 缓存（浏览量缓冲 + 防刷去重）
 	log     *log.Helper       // 结构化日志
 	gate    LikesGate         // 全站点赞开关（可为 nil，视为启用）
+	metrics *articleMetrics   // 文章域业务指标
+}
+
+// articleMetrics 文章域业务指标（按 result 标签区分成败，标签基数有界）。
+type articleMetrics struct {
+	create  metric.Int64Counter
+	update  metric.Int64Counter
+	remove  metric.Int64Counter
+	publish metric.Int64Counter
+	archive metric.Int64Counter
+	view    metric.Int64Counter
+	like    metric.Int64Counter
+	unlike  metric.Int64Counter
 }
 
 // LikesGate 提供全站点赞开关（由 site 配置实现）
@@ -151,9 +166,22 @@ type LikesGate interface {
 	IsLikesEnabled(ctx context.Context) (bool, error)
 }
 
-// NewArticleUseCase 构造函数（由 Wire 调用注入依赖）
+// NewArticleUseCase 构造函数（由 Wire 调用注入依赖）；业务指标在构造期创建
+// （Wire 阶段执行，此时 metrics.New 已完成，仪器绑定到真实 MeterProvider）。
 func NewArticleUseCase(repo ArticleRepo, tagRepo TagRepo, catRepo CategoryRepo, eb eventbus.EventBus, c cache.Cache, gate LikesGate, logger log.Logger) *ArticleUseCase {
-	return &ArticleUseCase{repo: repo, tagRepo: tagRepo, catRepo: catRepo, eb: eb, cache: c, gate: gate, log: log.NewHelper(logger)}
+	return &ArticleUseCase{
+		repo: repo, tagRepo: tagRepo, catRepo: catRepo, eb: eb, cache: c, gate: gate, log: log.NewHelper(logger),
+		metrics: &articleMetrics{
+			create:  metrics.Counter("blog_article_create_total", "文章创建次数"),
+			update:  metrics.Counter("blog_article_update_total", "文章更新次数"),
+			remove:  metrics.Counter("blog_article_delete_total", "文章删除次数"),
+			publish: metrics.Counter("blog_article_publish_total", "文章发布次数"),
+			archive: metrics.Counter("blog_article_archive_total", "文章归档次数"),
+			view:    metrics.Counter("blog_article_view_total", "文章浏览计数次数"),
+			like:    metrics.Counter("blog_article_like_total", "文章点赞次数"),
+			unlike:  metrics.Counter("blog_article_unlike_total", "文章取消点赞次数"),
+		},
+	}
 }
 
 // =============================================================================
@@ -216,7 +244,8 @@ const (
 //   - 这些计数仅在 PublishArticle 时 +1
 // =============================================================================
 
-func (uc *ArticleUseCase) CreateArticle(ctx context.Context, title, content, excerpt, coverImage string, categoryID *uint, tagNames []string) (*Article, error) {
+func (uc *ArticleUseCase) CreateArticle(ctx context.Context, title, content, excerpt, coverImage string, categoryID *uint, tagNames []string) (a *Article, err error) {
+	defer func() { recordResult(ctx, uc.metrics.create, err) }()
 	// ===================================================================
 	// 步骤1: 从 context 中提取当前登录用户 ID
 	// 该值由 Gateway 的 JWT 验证中间件在请求到达前注入到 context.Value("user_id")
@@ -359,7 +388,8 @@ func (uc *ArticleUseCase) CreateArticle(ctx context.Context, title, content, exc
 //  6. 若 tagNames 非 nil，全量替换标签关联（先删后增）
 // =============================================================================
 
-func (uc *ArticleUseCase) UpdateArticle(ctx context.Context, id uint, title, content, excerpt, coverImage *string, categoryID *uint, tagNames []string) (*Article, error) {
+func (uc *ArticleUseCase) UpdateArticle(ctx context.Context, id uint, title, content, excerpt, coverImage *string, categoryID *uint, tagNames []string) (a *Article, err error) {
+	defer func() { recordResult(ctx, uc.metrics.update, err) }()
 	uc.log.WithContext(ctx).Debugf("[UpdateArticle] 开始 article_id=%d has_title=%v has_content=%v has_excerpt=%v has_cover=%v has_category=%v has_tags=%v",
 		id, title != nil, content != nil, excerpt != nil, coverImage != nil, categoryID != nil, tagNames != nil)
 
@@ -532,7 +562,8 @@ func (uc *ArticleUseCase) UpdateArticle(ctx context.Context, id uint, title, con
 // 注意：计数调整失败不阻塞删除（记录 Warn 日志即可）
 // =============================================================================
 
-func (uc *ArticleUseCase) DeleteArticle(ctx context.Context, id uint) error {
+func (uc *ArticleUseCase) DeleteArticle(ctx context.Context, id uint) (err error) {
+	defer func() { recordResult(ctx, uc.metrics.remove, err) }()
 	uc.log.WithContext(ctx).Debugf("[DeleteArticle] 开始 article_id=%d", id)
 
 	// 步骤1: 权限与存在性校验
@@ -600,7 +631,8 @@ func (uc *ArticleUseCase) DeleteArticle(ctx context.Context, id uint) error {
 // 计数更新失败不阻塞发布（记录 Warn 日志），因为计数可通过定时任务修复。
 // =============================================================================
 
-func (uc *ArticleUseCase) PublishArticle(ctx context.Context, id uint) (*Article, error) {
+func (uc *ArticleUseCase) PublishArticle(ctx context.Context, id uint) (a *Article, err error) {
+	defer func() { recordResult(ctx, uc.metrics.publish, err) }()
 	uc.log.WithContext(ctx).Debugf("[PublishArticle] 开始 article_id=%d", id)
 
 	// 步骤1: 权限与存在性校验
@@ -684,7 +716,8 @@ func (uc *ArticleUseCase) PublishArticle(ctx context.Context, id uint) (*Article
 // 归档后文章不再展示在默认列表，但仍可通过 ID/Slug 访问。
 // =============================================================================
 
-func (uc *ArticleUseCase) ArchiveArticle(ctx context.Context, id uint) (*Article, error) {
+func (uc *ArticleUseCase) ArchiveArticle(ctx context.Context, id uint) (a *Article, err error) {
+	defer func() { recordResult(ctx, uc.metrics.archive, err) }()
 	uc.log.WithContext(ctx).Debugf("[ArchiveArticle] 开始 article_id=%d", id)
 
 	// 步骤1: 权限校验
@@ -752,11 +785,14 @@ func (uc *ArticleUseCase) ensureArticleVisible(ctx context.Context, article *Art
 	}
 	userID, err := getCurrentUserID(ctx)
 	if err != nil {
+		uc.log.WithContext(ctx).Warnf("[ensureArticleVisible] 文章不可见：请求未认证 article_id=%d status=%d", article.ID, article.Status)
 		return ErrArticleNotFound
 	}
 	if article.AuthorID == uint(userID) || getCurrentRole(ctx) == adminRole {
 		return nil
 	}
+	uc.log.WithContext(ctx).Warnf("[ensureArticleVisible] 文章不可见：非作者且非管理员 article_id=%d author_id=%d requester_id=%d",
+		article.ID, article.AuthorID, userID)
 	return ErrArticleNotFound
 }
 
@@ -791,7 +827,7 @@ func (uc *ArticleUseCase) GetArticle(ctx context.Context, identifier string) (*A
 	uc.log.WithContext(ctx).Debugf("[GetArticle] 尝试按Slug查询 slug=%q", identifier)
 	article, err := uc.repo.FindBySlug(ctx, identifier)
 	if err != nil {
-		uc.log.WithContext(ctx).Debugf("[GetArticle] Slug也未匹配 identifier=%q", identifier)
+		uc.log.WithContext(ctx).Warnf("[GetArticle] 文章不存在：ID/Slug 均未命中 identifier=%q", identifier)
 		return nil, ErrArticleNotFound
 	}
 
@@ -887,7 +923,8 @@ func (uc *ArticleUseCase) SearchArticles(ctx context.Context, keyword string, pa
 //  3. 异步发布 article.liked 事件
 // =============================================================================
 
-func (uc *ArticleUseCase) LikeArticle(ctx context.Context, articleID uint) error {
+func (uc *ArticleUseCase) LikeArticle(ctx context.Context, articleID uint) (err error) {
+	defer func() { recordResult(ctx, uc.metrics.like, err) }()
 	uc.log.WithContext(ctx).Debugf("[LikeArticle] 开始 article_id=%d", articleID)
 
 	// B-207: 全站点赞开关（gate 未注入时视为启用）
@@ -950,7 +987,8 @@ func (uc *ArticleUseCase) LikeArticle(ctx context.Context, articleID uint) error
 //       若 RowsAffected > 0 → UPDATE articles SET like_count = GREATEST(like_count - 1, 0)
 // =============================================================================
 
-func (uc *ArticleUseCase) UnlikeArticle(ctx context.Context, articleID uint) error {
+func (uc *ArticleUseCase) UnlikeArticle(ctx context.Context, articleID uint) (err error) {
+	defer func() { recordResult(ctx, uc.metrics.unlike, err) }()
 	uc.log.WithContext(ctx).Debugf("[UnlikeArticle] 开始 article_id=%d", articleID)
 
 	// B-207: 取消点赞同样要求文章存在（幂等删除由 data 层保证）
@@ -1015,7 +1053,8 @@ func (uc *ArticleUseCase) IncrementView(ctx context.Context, articleID uint) err
 // 返回值 counted：本次请求是否被计入浏览量。
 // =============================================================================
 
-func (uc *ArticleUseCase) ViewArticle(ctx context.Context, articleID uint, clientIP string) (bool, error) {
+func (uc *ArticleUseCase) ViewArticle(ctx context.Context, articleID uint, clientIP string) (counted bool, err error) {
+	defer func() { recordResult(ctx, uc.metrics.view, err) }()
 	uc.log.WithContext(ctx).Debugf("[ViewArticle] article_id=%d ip=%s", articleID, clientIP)
 
 	if articleID == 0 {
@@ -1416,10 +1455,10 @@ const (
 // =============================================================================
 
 const (
-	ViewCountCachePrefix = "ley:article:view:"    // Redis 浏览量增量 key 前缀
-	ViewCountDedupPrefix = "ley:article:dedup:"   // Redis IP 去重 key 前缀
-	ViewCountTTL         = 2 * time.Hour          // 浏览量缓存 key 存活时间
-	ViewDedupWindow      = 1 * time.Hour          // IP 去重窗口（同一 IP 对同一文章 1 小时内仅计 1 次）
+	ViewCountCachePrefix = "ley:article:view:"  // Redis 浏览量增量 key 前缀
+	ViewCountDedupPrefix = "ley:article:dedup:" // Redis IP 去重 key 前缀
+	ViewCountTTL         = 2 * time.Hour        // 浏览量缓存 key 存活时间
+	ViewDedupWindow      = 1 * time.Hour        // IP 去重窗口（同一 IP 对同一文章 1 小时内仅计 1 次）
 )
 
 // ArticleUpdatedEvent 文章更新事件
@@ -1456,5 +1495,3 @@ type ArticleLikedEvent struct {
 	ArticleID uint64 `json:"article_id"`
 	UserID    uint64 `json:"user_id"`
 }
-
-

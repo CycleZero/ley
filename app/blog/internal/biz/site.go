@@ -7,8 +7,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/CycleZero/ley/pkg/metrics"
 	kerrors "github.com/go-kratos/kratos/v2/errors"
 	"github.com/go-kratos/kratos/v2/log"
+	"go.opentelemetry.io/otel/metric"
 )
 
 // =============================================================================
@@ -16,20 +18,20 @@ import (
 // =============================================================================
 
 type SiteSetting struct {
-	SiteTitle           string         `json:"site_title"`                   // 站点标题（浏览器标签页显示）
-	SiteSubtitle        string         `json:"site_subtitle"`                // 站点副标题（首页标语）
-	SiteDescription     string         `json:"site_description"`             // 站点简介（SEO description）
-	SiteLogo            string         `json:"site_logo"`                    // 站点 Logo URL
-	SiteFavicon         string         `json:"site_favicon"`                 // 浏览器 Favicon URL
-	SeoKeywords         string         `json:"seo_keywords"`                 // SEO 关键词（meta keywords）
-	SeoDescription      string         `json:"seo_description"`              // SEO 描述（meta description，优先于 site_description）
-	SocialGithub        string         `json:"social_github"`                // GitHub 主页链接
-	SocialTwitter       string         `json:"social_twitter"`               // Twitter 主页链接
-	SocialEmail         string         `json:"social_email"`                 // 联系邮箱
-	FooterText          string         `json:"footer_text"`                  // 页脚文案（版权声明等）
-	ICPNumber           string         `json:"icp_number"`                   // ICP 备案号
-	EnableLikes         *bool          `json:"enable_likes,omitempty"`       // 全站点赞开关
-	MusicPlaylist       *MusicPlaylist `json:"music_playlist,omitempty"`     // 歌单
+	SiteTitle       string         `json:"site_title"`               // 站点标题（浏览器标签页显示）
+	SiteSubtitle    string         `json:"site_subtitle"`            // 站点副标题（首页标语）
+	SiteDescription string         `json:"site_description"`         // 站点简介（SEO description）
+	SiteLogo        string         `json:"site_logo"`                // 站点 Logo URL
+	SiteFavicon     string         `json:"site_favicon"`             // 浏览器 Favicon URL
+	SeoKeywords     string         `json:"seo_keywords"`             // SEO 关键词（meta keywords）
+	SeoDescription  string         `json:"seo_description"`          // SEO 描述（meta description，优先于 site_description）
+	SocialGithub    string         `json:"social_github"`            // GitHub 主页链接
+	SocialTwitter   string         `json:"social_twitter"`           // Twitter 主页链接
+	SocialEmail     string         `json:"social_email"`             // 联系邮箱
+	FooterText      string         `json:"footer_text"`              // 页脚文案（版权声明等）
+	ICPNumber       string         `json:"icp_number"`               // ICP 备案号
+	EnableLikes     *bool          `json:"enable_likes,omitempty"`   // 全站点赞开关
+	MusicPlaylist   *MusicPlaylist `json:"music_playlist,omitempty"` // 歌单
 }
 
 // =============================================================================
@@ -40,6 +42,7 @@ type SiteBackground struct {
 	ID        uint
 	Filename  string
 	URL       string
+	MimeType  string
 	IsActive  bool
 	SortOrder int
 	CreatedAt time.Time
@@ -91,12 +94,26 @@ var (
 // =============================================================================
 
 type SiteUseCase struct {
-	repo SiteRepo
-	log  *log.Helper
+	repo           SiteRepo
+	log            *log.Helper
+	updateConfig   metric.Int64Counter
+	addBackground  metric.Int64Counter
+	delBackground  metric.Int64Counter
+	setActive      metric.Int64Counter
+	updatePlaylist metric.Int64Counter
 }
 
+// NewSiteUseCase 构造站点配置用例；业务指标在构造期创建（Wire 阶段，metrics.New 已完成）。
 func NewSiteUseCase(repo SiteRepo, logger log.Logger) *SiteUseCase {
-	return &SiteUseCase{repo: repo, log: log.NewHelper(logger)}
+	return &SiteUseCase{
+		repo:           repo,
+		log:            log.NewHelper(logger),
+		updateConfig:   metrics.Counter("blog_site_config_update_total", "站点配置更新次数"),
+		addBackground:  metrics.Counter("blog_site_background_add_total", "背景图上传次数"),
+		delBackground:  metrics.Counter("blog_site_background_delete_total", "背景图删除次数"),
+		setActive:      metrics.Counter("blog_site_background_set_active_total", "背景图启用次数"),
+		updatePlaylist: metrics.Counter("blog_site_playlist_update_total", "音乐播放列表更新次数"),
+	}
 }
 
 // GetConfig 获取站点配置。优先读缓存，未命中查 DB。
@@ -111,7 +128,8 @@ func (uc *SiteUseCase) GetConfig(ctx context.Context) (*SiteSetting, error) {
 }
 
 // UpdateConfig 更新站点配置（仅管理员）。合并策略：仅覆盖传入的非零值字段，保留未传入字段的原值。
-func (uc *SiteUseCase) UpdateConfig(ctx context.Context, newCfg *SiteSetting) (*SiteSetting, error) {
+func (uc *SiteUseCase) UpdateConfig(ctx context.Context, newCfg *SiteSetting) (cfg *SiteSetting, err error) {
+	defer func() { recordResult(ctx, uc.updateConfig, err) }()
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
@@ -143,7 +161,8 @@ func (uc *SiteUseCase) ListBackgrounds(ctx context.Context) ([]*SiteBackground, 
 }
 
 // AddBackground 上传背景图片（仅管理员）。校验 MIME 类型后再存储。
-func (uc *SiteUseCase) AddBackground(ctx context.Context, filename string, content []byte) (*SiteBackground, error) {
+func (uc *SiteUseCase) AddBackground(ctx context.Context, filename string, content []byte) (bg *SiteBackground, err error) {
+	defer func() { recordResult(ctx, uc.addBackground, err) }()
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}
@@ -154,7 +173,7 @@ func (uc *SiteUseCase) AddBackground(ctx context.Context, filename string, conte
 		return nil, ErrInvalidImageFormat
 	}
 
-	bg := &SiteBackground{Filename: filename, SortOrder: 0}
+	bg = &SiteBackground{Filename: filename, MimeType: detectImageMimeType(content), SortOrder: 0}
 	if err := uc.repo.CreateBackground(ctx, bg, ioReader(content)); err != nil {
 		return nil, fmt.Errorf("add background: %w", err)
 	}
@@ -163,7 +182,8 @@ func (uc *SiteUseCase) AddBackground(ctx context.Context, filename string, conte
 }
 
 // DeleteBackground 删除背景图片（仅管理员）。
-func (uc *SiteUseCase) DeleteBackground(ctx context.Context, id uint) error {
+func (uc *SiteUseCase) DeleteBackground(ctx context.Context, id uint) (err error) {
+	defer func() { recordResult(ctx, uc.delBackground, err) }()
 	if err := requireAdmin(ctx); err != nil {
 		return err
 	}
@@ -171,7 +191,8 @@ func (uc *SiteUseCase) DeleteBackground(ctx context.Context, id uint) error {
 }
 
 // SetActiveBackground 激活指定背景图片（仅管理员）。
-func (uc *SiteUseCase) SetActiveBackground(ctx context.Context, id uint) error {
+func (uc *SiteUseCase) SetActiveBackground(ctx context.Context, id uint) (err error) {
+	defer func() { recordResult(ctx, uc.setActive, err) }()
 	if err := requireAdmin(ctx); err != nil {
 		return err
 	}
@@ -192,7 +213,8 @@ func (uc *SiteUseCase) GetPlaylist(ctx context.Context) (*MusicPlaylist, error) 
 }
 
 // UpdatePlaylist 更新歌单（仅管理员，写入站点配置 JSON）。
-func (uc *SiteUseCase) UpdatePlaylist(ctx context.Context, playlist *MusicPlaylist) (*MusicPlaylist, error) {
+func (uc *SiteUseCase) UpdatePlaylist(ctx context.Context, playlist *MusicPlaylist) (p *MusicPlaylist, err error) {
+	defer func() { recordResult(ctx, uc.updatePlaylist, err) }()
 	if err := requireAdmin(ctx); err != nil {
 		return nil, err
 	}

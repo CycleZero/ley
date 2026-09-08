@@ -6,8 +6,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/CycleZero/ley/pkg/metrics"
 	kerrors "github.com/go-kratos/kratos/v2/errors"
 	"github.com/go-kratos/kratos/v2/log"
+	"go.opentelemetry.io/otel/metric"
 )
 
 // =============================================================================
@@ -76,15 +78,15 @@ type CategoryRepo interface {
 // =============================================================================
 
 var (
-	ErrTagNotFound          = kerrors.NotFound("TAG_NOT_FOUND", "标签不存在")
-	ErrTagNameExists        = kerrors.Conflict("TAG_NAME_EXISTS", "标签名称已存在")
-	ErrCategoryNotFound     = kerrors.NotFound("CATEGORY_NOT_FOUND", "分类不存在")
-	ErrCategoryNameExists   = kerrors.Conflict("CATEGORY_NAME_EXISTS", "分类名称或Slug已存在")
-	ErrCategoryHasChildren  = kerrors.Conflict("CATEGORY_HAS_CHILDREN", "请先删除子分类")
-	ErrCategoryHasArticles  = kerrors.Conflict("CATEGORY_HAS_ARTICLES", "分类下存在文章，不允许删除")
-	ErrCategorySlugEmpty    = kerrors.BadRequest("CATEGORY_SLUG_EMPTY", "分类Slug不能为空")
-	ErrTagNameEmpty         = kerrors.BadRequest("TAG_NAME_EMPTY", "标签名称不能为空")
-	ErrCategoryCircularRef  = kerrors.BadRequest("CATEGORY_CIRCULAR_REF", "分类之间不能构成循环引用")
+	ErrTagNotFound         = kerrors.NotFound("TAG_NOT_FOUND", "标签不存在")
+	ErrTagNameExists       = kerrors.Conflict("TAG_NAME_EXISTS", "标签名称已存在")
+	ErrCategoryNotFound    = kerrors.NotFound("CATEGORY_NOT_FOUND", "分类不存在")
+	ErrCategoryNameExists  = kerrors.Conflict("CATEGORY_NAME_EXISTS", "分类名称或Slug已存在")
+	ErrCategoryHasChildren = kerrors.Conflict("CATEGORY_HAS_CHILDREN", "请先删除子分类")
+	ErrCategoryHasArticles = kerrors.Conflict("CATEGORY_HAS_ARTICLES", "分类下存在文章，不允许删除")
+	ErrCategorySlugEmpty   = kerrors.BadRequest("CATEGORY_SLUG_EMPTY", "分类Slug不能为空")
+	ErrTagNameEmpty        = kerrors.BadRequest("TAG_NAME_EMPTY", "标签名称不能为空")
+	ErrCategoryCircularRef = kerrors.BadRequest("CATEGORY_CIRCULAR_REF", "分类之间不能构成循环引用")
 )
 
 // =============================================================================
@@ -96,12 +98,20 @@ var (
 // =============================================================================
 
 type TagUseCase struct {
-	repo TagRepo     // 标签数据访问
-	log  *log.Helper // 结构化日志
+	repo   TagRepo     // 标签数据访问
+	log    *log.Helper // 结构化日志
+	create metric.Int64Counter
+	remove metric.Int64Counter
 }
 
+// NewTagUseCase 构造标签用例；业务指标在构造期创建（Wire 阶段，metrics.New 已完成）。
 func NewTagUseCase(repo TagRepo, logger log.Logger) *TagUseCase {
-	return &TagUseCase{repo: repo, log: log.NewHelper(logger)}
+	return &TagUseCase{
+		repo:   repo,
+		log:    log.NewHelper(logger),
+		create: metrics.Counter("blog_tag_create_total", "标签创建次数"),
+		remove: metrics.Counter("blog_tag_delete_total", "标签删除次数"),
+	}
 }
 
 // =============================================================================
@@ -115,7 +125,11 @@ func NewTagUseCase(repo TagRepo, logger log.Logger) *TagUseCase {
 // 不检查名称是否已存在（由 data 层的唯一约束兜底，冲突时返回 ErrTagNameExists）。
 // =============================================================================
 
-func (uc *TagUseCase) CreateTag(ctx context.Context, name string) (*Tag, error) {
+func (uc *TagUseCase) CreateTag(ctx context.Context, name string) (t *Tag, err error) {
+	defer func() { recordResult(ctx, uc.create, err) }()
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
+	}
 	uc.log.WithContext(ctx).Debugf("[CreateTag] 开始 name=%q", name)
 
 	// ===================================================================
@@ -193,7 +207,11 @@ func (uc *TagUseCase) ListTags(ctx context.Context) ([]*Tag, error) {
 // 标签被删除后，已关联该标签的文章不再显示此标签。
 // =============================================================================
 
-func (uc *TagUseCase) DeleteTag(ctx context.Context, id uint) error {
+func (uc *TagUseCase) DeleteTag(ctx context.Context, id uint) (err error) {
+	defer func() { recordResult(ctx, uc.remove, err) }()
+	if err := requireAdmin(ctx); err != nil {
+		return err
+	}
 	uc.log.WithContext(ctx).Debugf("[DeleteTag] 开始 id=%d", id)
 	if err := uc.repo.Delete(ctx, id); err != nil {
 		uc.log.WithContext(ctx).Errorf("[DeleteTag] 删除失败 id=%d err=%v", id, err)
@@ -213,12 +231,22 @@ func (uc *TagUseCase) DeleteTag(ctx context.Context, id uint) error {
 // =============================================================================
 
 type CategoryUseCase struct {
-	repo CategoryRepo  // 分类数据访问
-	log  *log.Helper   // 结构化日志
+	repo   CategoryRepo // 分类数据访问
+	log    *log.Helper  // 结构化日志
+	create metric.Int64Counter
+	update metric.Int64Counter
+	remove metric.Int64Counter
 }
 
+// NewCategoryUseCase 构造分类用例；业务指标在构造期创建（Wire 阶段，metrics.New 已完成）。
 func NewCategoryUseCase(repo CategoryRepo, logger log.Logger) *CategoryUseCase {
-	return &CategoryUseCase{repo: repo, log: log.NewHelper(logger)}
+	return &CategoryUseCase{
+		repo:   repo,
+		log:    log.NewHelper(logger),
+		create: metrics.Counter("blog_category_create_total", "分类创建次数"),
+		update: metrics.Counter("blog_category_update_total", "分类更新次数"),
+		remove: metrics.Counter("blog_category_delete_total", "分类删除次数"),
+	}
 }
 
 // =============================================================================
@@ -231,7 +259,11 @@ func NewCategoryUseCase(repo CategoryRepo, logger log.Logger) *CategoryUseCase {
 //  4. 委托 data 层创建
 // =============================================================================
 
-func (uc *CategoryUseCase) CreateCategory(ctx context.Context, name, slug, description string, parentID *uint, sortOrder int) (*Category, error) {
+func (uc *CategoryUseCase) CreateCategory(ctx context.Context, name, slug, description string, parentID *uint, sortOrder int) (c *Category, err error) {
+	defer func() { recordResult(ctx, uc.create, err) }()
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
+	}
 	uc.log.WithContext(ctx).Debugf("[CreateCategory] 开始 name=%q slug=%q parent_id=%v sort_order=%d",
 		name, slug, parentID, sortOrder)
 
@@ -299,7 +331,11 @@ func (uc *CategoryUseCase) CreateCategory(ctx context.Context, name, slug, descr
 //  3. 委托 data 层持久化
 // =============================================================================
 
-func (uc *CategoryUseCase) UpdateCategory(ctx context.Context, id uint, name, slug, description string, parentID *uint, sortOrder int) (*Category, error) {
+func (uc *CategoryUseCase) UpdateCategory(ctx context.Context, id uint, name, slug, description string, parentID *uint, sortOrder int) (c *Category, err error) {
+	defer func() { recordResult(ctx, uc.update, err) }()
+	if err := requireAdmin(ctx); err != nil {
+		return nil, err
+	}
 	uc.log.WithContext(ctx).Debugf("[UpdateCategory] 开始 id=%d name=%q slug=%q", id, name, slug)
 
 	// 步骤1: 查询分类确认存在
@@ -367,7 +403,11 @@ func (uc *CategoryUseCase) UpdateCategory(ctx context.Context, id uint, name, sl
 //  3. 委托 data 层软删除
 // =============================================================================
 
-func (uc *CategoryUseCase) DeleteCategory(ctx context.Context, id uint) error {
+func (uc *CategoryUseCase) DeleteCategory(ctx context.Context, id uint) (err error) {
+	defer func() { recordResult(ctx, uc.remove, err) }()
+	if err := requireAdmin(ctx); err != nil {
+		return err
+	}
 	uc.log.WithContext(ctx).Debugf("[DeleteCategory] 开始 id=%d", id)
 
 	// ===================================================================
@@ -447,6 +487,7 @@ func (uc *CategoryUseCase) checkCircularRef(ctx context.Context, selfID, parentI
 	currentID := parentID
 	for i := 0; i < 100; i++ {
 		if currentID == selfID {
+			uc.log.WithContext(ctx).Warnf("[checkCircularRef] 分类循环引用 self_id=%d parent_id=%d", selfID, parentID)
 			return ErrCategoryCircularRef
 		}
 		parent, err := uc.repo.FindByID(ctx, currentID)
@@ -458,5 +499,6 @@ func (uc *CategoryUseCase) checkCircularRef(ctx context.Context, selfID, parentI
 		}
 		currentID = *parent.ParentID
 	}
+	uc.log.WithContext(ctx).Warnf("[checkCircularRef] 分类层级超过上限 self_id=%d parent_id=%d", selfID, parentID)
 	return kerrors.InternalServer("CIRCULAR_CHECK_DEPTH", "分类层级超过最大限制(100层)")
 }
