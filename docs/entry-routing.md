@@ -24,6 +24,7 @@
 | POST | `/api/v1/auth/register` | `AuthHandler.Register` | 注册 |
 | POST | `/api/v1/auth/login` | `AuthHandler.Login` | 登录（返回双 token） |
 | POST | `/api/v1/auth/refresh` | `AuthHandler.RefreshToken` | 刷新 token 对 |
+| POST | `/api/v1/auth/logout` | `AuthHandler.Logout` | 登出（吊销 token；可选认证——access 过期时仍可凭 body 中 refresh_token 吊销） |
 | GET | `/api/v1/articles` | `ArticleHandler.ListArticles` | 文章列表（分页/过滤） |
 | GET | `/api/v1/articles/search` | `ArticleHandler.SearchArticles` | 全文搜索（仅已发布） |
 | GET | `/api/v1/articles/{identifier}` | `ArticleHandler.GetArticle` | 文章详情（ID 或 Slug；有 token 填充点赞状态） |
@@ -32,13 +33,11 @@
 | GET | `/api/v1/site/config` | `SiteHandler.GetSiteConfig` | 站点配置（公开只读） |
 | GET | `/api/v1/site/backgrounds` | `SiteHandler.ListBackgrounds` | 背景列表 |
 | GET | `/api/v1/site/music/playlist` | `SiteHandler.GetMusicPlaylist` | 音乐列表 |
-| GET | `/api/v1/files/presigned-upload` | `FileHandler.GetPresignedPutURL` | 预签名上传 URL（blog 侧无鉴权） |
 
 ### AUTH（17）
 
 | 方法 | 路径 | 代理 handler | 说明 |
 |---|---|---|---|
-| POST | `/api/v1/auth/logout` | `AuthHandler.Logout` | 登出（吊销 token） |
 | GET | `/api/v1/users/me` | `AuthHandler.GetProfile` | 当前用户资料 |
 | PUT | `/api/v1/users/me` | `AuthHandler.UpdateProfile` | 更新当前用户资料 |
 | POST | `/api/v1/articles` | `ArticleHandler.CreateArticle` | 创建文章（草稿） |
@@ -51,15 +50,13 @@
 | DELETE | `/api/v1/articles/{id}/like` | `ArticleHandler.UnlikeArticle` | 取消点赞 |
 | POST | `/api/v1/files/upload` | `FileHandler.UploadFile` | 服务端上传 |
 | GET | `/api/v1/files` | `FileHandler.ListFiles` | 文件列表 |
+| GET | `/api/v1/files/presigned-upload` | `FileHandler.GetPresignedPutURL` | 预签名上传 URL（须登录） |
 | GET | `/api/v1/files/{id}` | `FileHandler.GetFile` | 文件详情 |
 | DELETE | `/api/v1/files/{id}` | `FileHandler.DeleteFile` | 删除文件 |
 | POST | `/api/v1/files/presigned-uploads` | `FileHandler.CreatePresignedUpload` | 创建预签名上传记录 |
 | POST | `/api/v1/files/presigned-uploads/complete` | `FileHandler.CompletePresignedUpload` | 完成预签名上传 |
 
-### AUTHOR_OR_ADMIN（5）
-
-> ⚠️ 过渡约定：tag/category 写操作 blog 侧暂缺 `requireAdmin` 校验（Wave 5 盘点缺口），
-> entry 侧先按「作者或管理员」收口，待 blog 侧修复后收紧为 ADMIN。
+### ADMIN（10）
 
 | 方法 | 路径 | 代理 handler | 说明 |
 |---|---|---|---|
@@ -68,16 +65,14 @@
 | POST | `/api/v1/categories` | `CategoryHandler.CreateCategory` | 创建分类 |
 | PUT | `/api/v1/categories/{id}` | `CategoryHandler.UpdateCategory` | 更新分类 |
 | DELETE | `/api/v1/categories/{id}` | `CategoryHandler.DeleteCategory` | 删除分类 |
-
-### ADMIN（5）
-
-| 方法 | 路径 | 代理 handler | 说明 |
-|---|---|---|---|
 | PUT | `/api/v1/site/config` | `SiteHandler.UpdateSiteConfig` | 更新站点配置 |
 | POST | `/api/v1/site/backgrounds` | `SiteHandler.UploadBackground` | 上传背景图 |
 | DELETE | `/api/v1/site/backgrounds/{id}` | `SiteHandler.DeleteBackground` | 删除背景 |
 | PUT | `/api/v1/site/backgrounds/{id}/active` | `SiteHandler.SetActiveBackground` | 设为当前背景 |
 | PUT | `/api/v1/site/music/playlist` | `SiteHandler.UpdateMusicPlaylist` | 更新音乐列表 |
+
+> tag/category 写操作已在 blog 侧接入 `requireAdmin`（FIX-4），entry 同步由
+> AUTHOR_OR_ADMIN 收紧为 ADMIN；AUTHOR_OR_ADMIN 分类保留为能力，当前无路由使用。
 
 ## 非业务路由（不经鉴权链）
 
