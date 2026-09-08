@@ -131,3 +131,33 @@ func TestMetaSkipsEmptyRole(t *testing.T) {
 		t.Errorf("空 Role 不应写入: %q", got)
 	}
 }
+
+// FIX-1: access token 须随请求元数据透传——entry 经 gRPC 转发时不携带原始
+// Authorization 头，auth 的 Logout 只能从元数据取得 access token 才能吊销它。
+func TestMetaCarriesAccessToken(t *testing.T) {
+	reqMeta := &RequestMetaData{
+		Auth:        Auth{UserID: 1, UserName: "bob"},
+		AccessToken: "header.payload.sig",
+	}
+
+	md := reqMeta.IntoMetadata()
+	if got := md.Get(AuthAccessTokenKey); got != "header.payload.sig" {
+		t.Errorf("AuthAccessTokenKey 缺失或值错误: got %q want header.payload.sig", got)
+	}
+
+	parsed := ParseMetadata(md)
+	if parsed.AccessToken != "header.payload.sig" {
+		t.Errorf("AccessToken 往返不一致: %+v", parsed)
+	}
+	if parsed.Auth.UserID != 1 || parsed.Auth.UserName != "bob" {
+		t.Errorf("AccessToken 携带不应破坏既有字段: %+v", parsed.Auth)
+	}
+}
+
+// FIX-1: access token 为空时不写入 metadata（与其它零值字段一致）
+func TestMetaSkipsEmptyAccessToken(t *testing.T) {
+	md := (&RequestMetaData{Auth: Auth{UserID: 1}}).IntoMetadata()
+	if got := md.Get(AuthAccessTokenKey); got != "" {
+		t.Errorf("空 AccessToken 不应写入: %q", got)
+	}
+}

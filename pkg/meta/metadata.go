@@ -19,6 +19,8 @@ const (
 	AuthUserRoleKey = MetaDataKeyPrefix + "auth-user-role"
 	// AuthRealClientIpKey 真实IP（全局透传）
 	AuthRealClientIpKey = MetaDataKeyPrefix + "auth-real-ip"
+	// AuthAccessTokenKey 原始 access token（全局透传；仅供下游吊销令牌使用，不参与身份解析）
+	AuthAccessTokenKey = MetaDataKeyPrefix + "auth-access-token"
 )
 
 // =====================  业务元数据结构体 =====================
@@ -27,6 +29,7 @@ const (
 type RequestMetaData struct {
 	Auth         Auth   // 认证信息
 	RealClientIp string // 真实IP（全局透传）
+	AccessToken  string // 原始 access token（全局透传；供下游吊销，不参与身份解析）
 }
 
 // Auth 认证信息
@@ -59,6 +62,9 @@ func (m *RequestMetaData) IntoMetadata() metadata.Metadata {
 	if m.RealClientIp != "" {
 		md.Set(AuthRealClientIpKey, m.RealClientIp)
 	}
+	if m.AccessToken != "" {
+		md.Set(AuthAccessTokenKey, m.AccessToken)
+	}
 
 	return md
 }
@@ -78,6 +84,7 @@ func ParseMetadata(md metadata.Metadata) *RequestMetaData {
 	meta.Auth.UserName = md.Get(AuthUserNameKey)
 	meta.Auth.Role = md.Get(AuthUserRoleKey)
 	meta.RealClientIp = md.Get(AuthRealClientIpKey)
+	meta.AccessToken = md.Get(AuthAccessTokenKey)
 
 	return meta
 }
