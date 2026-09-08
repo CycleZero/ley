@@ -41,8 +41,8 @@ const (
 	// RouteClassAuth 登录用户路由：强制认证（AuthMiddleWire(false)）。
 	RouteClassAuth
 	// RouteClassAuthorOrAdmin 作者/管理员路由：强制认证 + RequireRole("author","admin")。
-	// 说明：tag/category 写操作 blog 侧暂缺 requireAdmin 校验（Wave 5 盘点缺口），
-	// entry 侧先按双角色收口，等 blog 侧修复后再收紧。
+	// 分类能力保留；当前 39 条路由无使用方——tag/category 写操作已随 blog 侧
+	// requireAdmin 落地（FIX-4）收紧为 ADMIN。
 	RouteClassAuthorOrAdmin
 	// RouteClassAdmin 管理员路由：强制认证 + RequireRole("admin")。
 	RouteClassAdmin
@@ -100,10 +100,9 @@ func newRouteRules(hub *proxy.ServiceHub) []RouteRule {
 		{http.MethodGet, apiV1BasePath + "/site/config", RouteClassPublic, siteH.GetSiteConfig},
 		{http.MethodGet, apiV1BasePath + "/site/backgrounds", RouteClassPublic, siteH.ListBackgrounds},
 		{http.MethodGet, apiV1BasePath + "/site/music/playlist", RouteClassPublic, siteH.GetMusicPlaylist},
-		{http.MethodGet, apiV1BasePath + "/files/presigned-upload", RouteClassPublic, fileH.GetPresignedPutURL},
+		{http.MethodPost, apiV1BasePath + "/auth/logout", RouteClassPublic, authH.Logout},
 
 		// ── AUTH：登录用户（强制认证）──
-		{http.MethodPost, apiV1BasePath + "/auth/logout", RouteClassAuth, authH.Logout},
 		{http.MethodGet, apiV1BasePath + "/users/me", RouteClassAuth, authH.GetProfile},
 		{http.MethodPut, apiV1BasePath + "/users/me", RouteClassAuth, authH.UpdateProfile},
 		{http.MethodPost, apiV1BasePath + "/articles", RouteClassAuth, articleH.CreateArticle},
@@ -116,19 +115,18 @@ func newRouteRules(hub *proxy.ServiceHub) []RouteRule {
 		{http.MethodDelete, apiV1BasePath + "/articles/{id}/like", RouteClassAuth, articleH.UnlikeArticle},
 		{http.MethodPost, apiV1BasePath + "/files/upload", RouteClassAuth, fileH.UploadFile},
 		{http.MethodGet, apiV1BasePath + "/files", RouteClassAuth, fileH.ListFiles},
+		{http.MethodGet, apiV1BasePath + "/files/presigned-upload", RouteClassAuth, fileH.GetPresignedPutURL},
 		{http.MethodGet, apiV1BasePath + "/files/{id}", RouteClassAuth, fileH.GetFile},
 		{http.MethodDelete, apiV1BasePath + "/files/{id}", RouteClassAuth, fileH.DeleteFile},
 		{http.MethodPost, apiV1BasePath + "/files/presigned-uploads", RouteClassAuth, fileH.CreatePresignedUpload},
 		{http.MethodPost, apiV1BasePath + "/files/presigned-uploads/complete", RouteClassAuth, fileH.CompletePresignedUpload},
 
-		// ── AUTHOR_OR_ADMIN：作者/管理员（tag/category 写操作，见文件头说明）──
-		{http.MethodPost, apiV1BasePath + "/tags", RouteClassAuthorOrAdmin, tagH.CreateTag},
-		{http.MethodDelete, apiV1BasePath + "/tags/{id}", RouteClassAuthorOrAdmin, tagH.DeleteTag},
-		{http.MethodPost, apiV1BasePath + "/categories", RouteClassAuthorOrAdmin, categoryH.CreateCategory},
-		{http.MethodPut, apiV1BasePath + "/categories/{id}", RouteClassAuthorOrAdmin, categoryH.UpdateCategory},
-		{http.MethodDelete, apiV1BasePath + "/categories/{id}", RouteClassAuthorOrAdmin, categoryH.DeleteCategory},
-
-		// ── ADMIN：管理员（站点配置/背景/音乐列表）──
+		// ── ADMIN：管理员（tag/category 写操作 + 站点配置/背景/音乐列表）──
+		{http.MethodPost, apiV1BasePath + "/tags", RouteClassAdmin, tagH.CreateTag},
+		{http.MethodDelete, apiV1BasePath + "/tags/{id}", RouteClassAdmin, tagH.DeleteTag},
+		{http.MethodPost, apiV1BasePath + "/categories", RouteClassAdmin, categoryH.CreateCategory},
+		{http.MethodPut, apiV1BasePath + "/categories/{id}", RouteClassAdmin, categoryH.UpdateCategory},
+		{http.MethodDelete, apiV1BasePath + "/categories/{id}", RouteClassAdmin, categoryH.DeleteCategory},
 		{http.MethodPut, apiV1BasePath + "/site/config", RouteClassAdmin, siteH.UpdateSiteConfig},
 		{http.MethodPost, apiV1BasePath + "/site/backgrounds", RouteClassAdmin, siteH.UploadBackground},
 		{http.MethodDelete, apiV1BasePath + "/site/backgrounds/{id}", RouteClassAdmin, siteH.DeleteBackground},

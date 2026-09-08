@@ -24,6 +24,7 @@ const requestMetaKey = "ley.request-meta"
 type RequestMetaData struct {
 	Auth         Auth   // 认证信息；未登录时为零值
 	RealClientIp string // 真实客户端 IP（X-Forwarded-For 首段优先）
+	AccessToken  string // 原始 access token（透传下游，供登出吊销）
 }
 
 // Auth 认证信息（镜像 pkg/meta.Auth 字段）。
@@ -63,6 +64,7 @@ func BuildRequestMeta(c *gin.Context) *pkgmeta.RequestMetaData {
 			UserName: m.Auth.UserName,
 			Role:     m.Auth.Role,
 		}
+		out.AccessToken = m.AccessToken
 	}
 	return out
 }

@@ -16,7 +16,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// bearerPrefix Authorization 头的 Bearer 令牌前缀（大小写敏感，RFC 6750）。
+// bearerPrefix Authorization 头的 Bearer 令牌前缀（scheme 大小写不敏感，RFC 6750 §2.1）。
 const bearerPrefix = "Bearer "
 
 // gin.Context 键约定（跨中间件/handler 传递用户身份，本包内统一读写）：
@@ -119,6 +119,7 @@ func NewJWTAuth(jwt jwtpkg.JWT, blacklist jwtpkg.BlackListCache) func(optional b
 					UserName: claims.UserName,
 					Role:     claims.Role,
 				},
+				AccessToken: token,
 			})
 			c.Next()
 		}
@@ -144,11 +145,11 @@ func extractBearerToken(header string) (string, bearerErrKind) {
 	if header == "" {
 		return "", bearerNone
 	}
-	rest, found := strings.CutPrefix(header, bearerPrefix)
-	if !found {
+	// scheme 大小写不敏感（RFC 6750 §2.1）
+	if len(header) < len(bearerPrefix) || !strings.EqualFold(header[:len(bearerPrefix)], bearerPrefix) {
 		return "", bearerMalformed
 	}
-	token := strings.TrimSpace(rest)
+	token := strings.TrimSpace(header[len(bearerPrefix):])
 	if token == "" {
 		// 形如 "Bearer "：前缀后无内容，等同未提供
 		return "", bearerNone

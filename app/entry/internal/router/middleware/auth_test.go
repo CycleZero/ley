@@ -145,6 +145,7 @@ func TestJWTAuthInjectsUserMeta(t *testing.T) {
 			"meta_uid":   m.Auth.UserID,
 			"meta_name":  m.Auth.UserName,
 			"meta_role":  m.Auth.Role,
+			"meta_token": m.AccessToken, // FIX-1: 原始 access token 供下游吊销
 			"ctx_uid":    ctxUID,
 			"ctx_name":   ctxName,
 			"ctx_role":   ctxRole,
@@ -167,6 +168,11 @@ func TestJWTAuthInjectsUserMeta(t *testing.T) {
 	if str(data, "meta_name") != "bob" || str(data, "meta_role") != "admin" {
 		t.Fatalf("meta 用户名/角色注入不符: %v", data)
 	}
+	// FIX-1: 原始 access token 必须随元数据透传（entry 不转发 Authorization 头，
+	// 下游 auth 的 Logout 依赖它吊销 access token）
+	if str(data, "meta_token") != token {
+		t.Fatalf("meta.AccessToken 注入不符：期望 %q，实际 %q", token, str(data, "meta_token"))
+	}
 	// gin 上下文键（RBAC 角色来源）
 	if uid := num(data, "ctx_uid"); uid != 42 {
 		t.Fatalf("ctx user_id 注入不符：期望 42，实际 %v", uid)
@@ -186,4 +192,14 @@ func num(data map[string]any, key string) float64 {
 func str(data map[string]any, key string) string {
 	v, _ := data[key].(string)
 	return v
+}
+
+// FIX-10: RFC 6750 §2.1 规定 scheme 大小写不敏感，小写 bearer 前缀应等价
+func TestJWTAuthBearerSchemeCaseInsensitive(t *testing.T) {
+	jwt := newTestJWT(15 * time.Minute)
+	token := issueToken(t, jwt, 7, "carol", "reader")
+
+	e := newEngine(NewJWTAuth(jwt, enabledBlacklist(t))(false))
+	rec := perform(t, e, http.MethodGet, "/ping", map[string]string{"Authorization": "bearer " + token})
+	wantStatus(t, rec, http.StatusOK)
 }
