@@ -68,12 +68,16 @@ func (m *mockUserRepo) Create(ctx context.Context, u *biz.User) error {
 	return nil
 }
 
-func (m *mockUserRepo) Update(ctx context.Context, u *biz.User) error {
+func (m *mockUserRepo) UpdateProfile(ctx context.Context, id uint, avatar, bio string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	cp := *u
-	cp.UpdatedAt = time.Now()
-	m.users[u.ID] = &cp
+	u, ok := m.users[id]
+	if !ok {
+		return biz.ErrUserNotFound
+	}
+	u.Avatar = avatar
+	u.Bio = bio
+	u.UpdatedAt = time.Now()
 	return nil
 }
 
@@ -364,5 +368,42 @@ func TestServiceLogout(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("Logout 失败: %v", err)
+	}
+}
+
+// FIX-1: entry 经 gRPC 转发时不携带原始 Authorization 头，access token 只能经
+// pkg/meta 透传；Logout 必须据此吊销 access token，否则登出后 15 分钟内仍可用。
+func TestServiceLogoutBlacklistsAccessTokenFromMeta(t *testing.T) {
+	repo := newMockUserRepo()
+	j := jwt.NewJWT(&jwt.Config{
+		SigningKey:  "test-signing-key-0123456789-256bit-random",
+		ExpiredTime: time.Hour,
+		Issuer:      "test",
+	})
+	bl := jwt.NewBlackList(datatest.NewInMemoryCache())
+	authUC := biz.NewAuthUseCase(repo, j, bl, &mockEventBus{}, log.DefaultLogger)
+	svc := NewAuthService(authUC, biz.NewUserUseCase(repo, log.DefaultLogger), log.DefaultLogger)
+
+	hash, _ := security.HashPassword("Password123")
+	repo.seed(&biz.User{Username: "tester", Email: "t@example.com", Password: hash, Role: biz.RoleReader, Status: biz.UserStatusActive})
+	loginResp, err := svc.Login(context.Background(), &authv1.LoginRequest{Account: "tester", Password: "Password123"})
+	if err != nil {
+		t.Fatalf("Login 失败: %v", err)
+	}
+
+	// 模拟 entry：无 transport Authorization 头，仅经 pkg/meta 透传 access token
+	ctx := meta.NewClientCtx(context.Background(), &meta.RequestMetaData{
+		Auth:        meta.Auth{UserID: 1, UserName: "tester"},
+		AccessToken: loginResp.TokenPair.AccessToken,
+	})
+	if _, err := svc.Logout(ctx, &authv1.LogoutRequest{RefreshToken: loginResp.TokenPair.RefreshToken}); err != nil {
+		t.Fatalf("Logout 失败: %v", err)
+	}
+
+	if !bl.IsTokenBlackListed(loginResp.TokenPair.AccessToken) {
+		t.Error("登出后 access token 应进入黑名单（entry gRPC 路径）")
+	}
+	if !bl.IsTokenBlackListed(loginResp.TokenPair.RefreshToken) {
+		t.Error("登出后 refresh token 应进入黑名单")
 	}
 }
