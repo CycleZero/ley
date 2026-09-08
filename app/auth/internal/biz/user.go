@@ -82,7 +82,7 @@ const (
 
 type UserRepo interface {
 	Create(ctx context.Context, user *User) error
-	Update(ctx context.Context, user *User) error
+	UpdateProfile(ctx context.Context, id uint, avatar, bio string) error
 	Delete(ctx context.Context, id uint) error
 	FindByID(ctx context.Context, id uint) (*User, error)
 	FindByUsername(ctx context.Context, username string) (*User, error)
@@ -101,33 +101,40 @@ type UserUseCase struct {
 	log  *log.Helper
 }
 
+// NewUserUseCase 构造用户资料用例。
 func NewUserUseCase(repo UserRepo, logger log.Logger) *UserUseCase {
 	return &UserUseCase{repo: repo, log: log.NewHelper(logger)}
 }
 
-// GetProfile 获取用户资料
+// GetProfile 获取用户资料；用户不存在时统一返回 ErrUserNotFound（不泄漏底层错误）。
 func (uc *UserUseCase) GetProfile(ctx context.Context, userID uint) (*User, error) {
 	user, err := uc.repo.FindByID(ctx, userID)
 	if err != nil {
+		uc.log.WithContext(ctx).Warnf("获取资料失败：用户不存在 id=%d", userID)
 		return nil, ErrUserNotFound
 	}
 	return user, nil
 }
 
-// UpdateProfile 更新用户资料
+// UpdateProfile 更新用户资料（仅头像与简介）。
+// 先校验简介长度，再确认用户存在，最后只写 avatar/bio 两列，避免全字段回写竞态。
 func (uc *UserUseCase) UpdateProfile(ctx context.Context, userID uint, avatar, bio string) (*User, error) {
 	if len(bio) > MaxBioLength {
+		uc.log.WithContext(ctx).Warnf("更新资料失败：简介超长 id=%d len=%d", userID, len(bio))
 		return nil, ErrBioTooLong
 	}
 	user, err := uc.repo.FindByID(ctx, userID)
 	if err != nil {
+		uc.log.WithContext(ctx).Warnf("更新资料失败：用户不存在 id=%d", userID)
 		return nil, ErrUserNotFound
+	}
+	if err := uc.repo.UpdateProfile(ctx, userID, avatar, bio); err != nil {
+		uc.log.WithContext(ctx).Errorf("更新资料写入失败 id=%d: %v", userID, err)
+		return nil, fmt.Errorf("update profile: %w", err)
 	}
 	user.Avatar = avatar
 	user.Bio = bio
-	if err := uc.repo.Update(ctx, user); err != nil {
-		return nil, fmt.Errorf("update profile: %w", err)
-	}
+	uc.log.WithContext(ctx).Infof("更新资料成功 id=%d", userID)
 	return user, nil
 }
 
@@ -145,20 +152,31 @@ func (uc *UserUseCase) List(ctx context.Context, page, pageSize int) ([]*User, i
 	return uc.repo.List(ctx, page, pageSize)
 }
 
-// UpdateStatus 更新用户状态（启用/禁用）
+// UpdateStatus 更新用户状态（启用/禁用）；禁用属关键状态迁移，记录 Info 审计日志。
 func (uc *UserUseCase) UpdateStatus(ctx context.Context, id uint, status UserStatus) error {
-	return uc.repo.UpdateStatus(ctx, id, status)
+	if err := uc.repo.UpdateStatus(ctx, id, status); err != nil {
+		uc.log.WithContext(ctx).Errorf("更新用户状态失败 id=%d status=%s: %v", id, status, err)
+		return err
+	}
+	uc.log.WithContext(ctx).Infof("更新用户状态成功 id=%d status=%s", id, status)
+	return nil
 }
 
-// Delete 删除用户
+// Delete 删除用户；删除属关键状态迁移，记录 Info 审计日志。
 func (uc *UserUseCase) Delete(ctx context.Context, id uint) error {
-	return uc.repo.Delete(ctx, id)
+	if err := uc.repo.Delete(ctx, id); err != nil {
+		uc.log.WithContext(ctx).Errorf("删除用户失败 id=%d: %v", id, err)
+		return err
+	}
+	uc.log.WithContext(ctx).Infof("删除用户成功 id=%d", id)
+	return nil
 }
 
 // =============================================================================
 // 校验函数
 // =============================================================================
 
+// validateUsername 校验用户名：长度符合且仅允许字母、数字、下划线、连字符。
 func validateUsername(username string) error {
 	if len(username) < MinUsernameLength || len(username) > MaxUsernameLength {
 		return ErrUsernameInvalid
@@ -172,6 +190,7 @@ func validateUsername(username string) error {
 	return nil
 }
 
+// validatePassword 校验密码强度：长度合规且同时包含大写、小写、数字。
 func validatePassword(password string) error {
 	if len(password) < MinPasswordLength {
 		return ErrPasswordTooShort

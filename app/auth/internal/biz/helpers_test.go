@@ -25,6 +25,7 @@ type mockUserRepo struct {
 	usernameIX map[string]uint
 	emailIX    map[string]uint
 	nextID     uint
+	stale      *User // 测试用：非 nil 时 FindByID 返回该陈旧快照（模拟缓存未失效）
 }
 
 func newMockUserRepo() *mockUserRepo {
@@ -71,15 +72,16 @@ func (m *mockUserRepo) Create(ctx context.Context, u *User) error {
 	return nil
 }
 
-func (m *mockUserRepo) Update(ctx context.Context, u *User) error {
+func (m *mockUserRepo) UpdateProfile(ctx context.Context, id uint, avatar, bio string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if _, ok := m.users[u.ID]; !ok {
+	u, ok := m.users[id]
+	if !ok {
 		return ErrUserNotFound
 	}
-	cp := *u
-	cp.UpdatedAt = time.Now()
-	m.users[u.ID] = &cp
+	u.Avatar = avatar
+	u.Bio = bio
+	u.UpdatedAt = time.Now()
 	return nil
 }
 
@@ -99,6 +101,10 @@ func (m *mockUserRepo) Delete(ctx context.Context, id uint) error {
 func (m *mockUserRepo) FindByID(ctx context.Context, id uint) (*User, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.stale != nil {
+		cp := *m.stale
+		return &cp, nil
+	}
 	u, ok := m.users[id]
 	if !ok {
 		return nil, ErrUserNotFound

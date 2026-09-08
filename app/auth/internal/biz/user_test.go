@@ -136,6 +136,38 @@ func TestUpdateProfileNotFound(t *testing.T) {
 	}
 }
 
+// FIX-6: UpdateProfile 只能写 avatar/bio——不得回写加载快照中的其它字段。
+// 缓存陈旧时（如管理员刚禁用账号而缓存尚未失效）全字段回写会把 status/role
+// 旧值覆盖回库，禁用账号可借自身资料更新复活。
+func TestUpdateProfileDoesNotRevertOtherFields(t *testing.T) {
+	uc, repo := setupUserUseCase()
+	// 库中真实状态：禁用 + reader
+	stored := repo.Seed(&User{
+		Username: "tester", Email: "t@example.com", Password: "hash",
+		Role: RoleReader, Status: UserStatusDisabled,
+	})
+	// 模拟陈旧缓存快照：FindByID 返回禁用前的快照（active + admin）
+	repo.stale = &User{
+		ID: stored.ID, Username: "tester", Email: "t@example.com", Password: "hash",
+		Role: RoleAdmin, Status: UserStatusActive,
+	}
+
+	if _, err := uc.UpdateProfile(context.Background(), stored.ID, "new-avatar", "new-bio"); err != nil {
+		t.Fatalf("UpdateProfile 失败: %v", err)
+	}
+
+	got := repo.users[stored.ID]
+	if got.Status != UserStatusDisabled {
+		t.Errorf("UpdateProfile 不应回写 status: got %v want %v", got.Status, UserStatusDisabled)
+	}
+	if got.Role != RoleReader {
+		t.Errorf("UpdateProfile 不应回写 role: got %v want %v", got.Role, RoleReader)
+	}
+	if got.Avatar != "new-avatar" || got.Bio != "new-bio" {
+		t.Errorf("avatar/bio 应更新: %+v", got)
+	}
+}
+
 // =============================================================================
 // 其他用例
 // =============================================================================
