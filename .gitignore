@@ -49,6 +49,7 @@ bin/
 
 openapi.yaml
 .reasonix/
+reasonix.toml
 .claude
 
 opencode.json
